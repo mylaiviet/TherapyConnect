@@ -169,3 +169,107 @@ export const US_STATES = [
 export const LICENSE_TYPES = [
   'LCSW', 'LMFT', 'LPC', 'LPCC', 'PhD', 'PsyD', 'MD', 'DO', 'LMHC', 'LCPC'
 ];
+
+// Appointment Scheduling Enums
+export const appointmentStatusEnum = pgEnum('appointment_status', ['pending', 'confirmed', 'cancelled', 'completed', 'no_show']);
+export const bookingModeEnum = pgEnum('booking_mode', ['instant', 'request']);
+
+// Therapist Availability Table
+export const therapistAvailability = pgTable("therapist_availability", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  dayOfWeek: integer("day_of_week").notNull(), // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  startTime: text("start_time").notNull(), // "09:00"
+  endTime: text("end_time").notNull(), // "17:00"
+  slotDuration: integer("slot_duration").default(60), // minutes per appointment
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Appointments Table
+export const appointments = pgTable("appointments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  patientName: text("patient_name").notNull(),
+  patientEmail: text("patient_email").notNull(),
+  patientPhone: text("patient_phone"),
+  appointmentDate: text("appointment_date").notNull(), // "2025-10-20"
+  startTime: text("start_time").notNull(), // "14:00"
+  endTime: text("end_time").notNull(), // "15:00"
+  status: appointmentStatusEnum("status").default('pending').notNull(),
+  notes: text("notes"),
+  bookingType: bookingModeEnum("booking_type").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Therapist Booking Settings Table
+export const therapistBookingSettings = pgTable("therapist_booking_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  bookingMode: bookingModeEnum("booking_mode").default('instant').notNull(),
+  bufferTime: integer("buffer_time").default(0), // minutes between appointments
+  advanceBookingDays: integer("advance_booking_days").default(30), // how far ahead can patients book
+  minNoticeHours: integer("min_notice_hours").default(24), // minimum notice for booking
+  allowCancellation: boolean("allow_cancellation").default(true),
+  cancellationHours: integer("cancellation_hours").default(24), // hours before appointment
+  googleCalendarConnected: boolean("google_calendar_connected").default(false),
+  googleCalendarId: text("google_calendar_id"),
+  outlookCalendarConnected: boolean("outlook_calendar_connected").default(false),
+  outlookCalendarId: text("outlook_calendar_id"),
+  emailNotifications: boolean("email_notifications").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Blocked Time Slots Table (for vacations, breaks, etc.)
+export const blockedTimeSlots = pgTable("blocked_time_slots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  startDate: text("start_date").notNull(), // "2025-10-20"
+  endDate: text("end_date").notNull(), // "2025-10-25"
+  startTime: text("start_time"), // optional - if not set, blocks entire day
+  endTime: text("end_time"), // optional
+  reason: text("reason"), // "vacation", "sick", "personal", etc.
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Zod Schemas for Scheduling
+export const insertAvailabilitySchema = createInsertSchema(therapistAvailability).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAppointmentSchema = createInsertSchema(appointments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertBookingSettingsSchema = createInsertSchema(therapistBookingSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertBlockedTimeSchema = createInsertSchema(blockedTimeSlots).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for Scheduling
+export type TherapistAvailability = typeof therapistAvailability.$inferSelect;
+export type InsertAvailability = z.infer<typeof insertAvailabilitySchema>;
+export type Appointment = typeof appointments.$inferSelect;
+export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
+export type BookingSettings = typeof therapistBookingSettings.$inferSelect;
+export type InsertBookingSettings = z.infer<typeof insertBookingSettingsSchema>;
+export type BlockedTime = typeof blockedTimeSlots.$inferSelect;
+export type InsertBlockedTime = z.infer<typeof insertBlockedTimeSchema>;
+
+// Time slot type for availability checking
+export type TimeSlot = {
+  time: string; // "14:00"
+  available: boolean;
+  duration: number; // minutes
+};

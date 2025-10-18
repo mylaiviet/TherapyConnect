@@ -1,13 +1,30 @@
 import { db } from "./db";
-import { therapists, users, adminUsers } from "@shared/schema";
+import {
+  therapists,
+  users,
+  adminUsers,
+  therapistAvailability,
+  appointments,
+  therapistBookingSettings,
+  blockedTimeSlots
+} from "@shared/schema";
 import { eq, and, or, like, gte, lte, sql } from "drizzle-orm";
-import type { 
-  Therapist, 
-  InsertTherapist, 
-  User, 
+import type {
+  Therapist,
+  InsertTherapist,
+  User,
   InsertUser,
   AdminUser,
-  InsertAdminUser 
+  InsertAdminUser,
+  TherapistAvailability,
+  InsertAvailability,
+  Appointment,
+  InsertAppointment,
+  BookingSettings,
+  InsertBookingSettings,
+  BlockedTime,
+  InsertBlockedTime,
+  TimeSlot
 } from "@shared/schema";
 
 export interface IStorage {
@@ -32,6 +49,32 @@ export interface IStorage {
   createAdminUser(adminUser: InsertAdminUser): Promise<AdminUser>;
   getAdminUserByUserId(userId: string): Promise<AdminUser | undefined>;
   isAdmin(userId: string): Promise<boolean>;
+
+  // Appointment Scheduling - Availability
+  createAvailability(availability: InsertAvailability): Promise<TherapistAvailability>;
+  getAvailability(therapistId: string): Promise<TherapistAvailability[]>;
+  updateAvailability(id: string, data: Partial<InsertAvailability>): Promise<TherapistAvailability>;
+  deleteAvailability(id: string): Promise<void>;
+
+  // Appointment Scheduling - Booking Settings
+  getBookingSettings(therapistId: string): Promise<BookingSettings | undefined>;
+  createBookingSettings(settings: InsertBookingSettings): Promise<BookingSettings>;
+  updateBookingSettings(therapistId: string, data: Partial<InsertBookingSettings>): Promise<BookingSettings>;
+
+  // Appointment Scheduling - Appointments
+  createAppointment(appointment: InsertAppointment): Promise<Appointment>;
+  getAppointments(therapistId: string, status?: string): Promise<Appointment[]>;
+  getAppointment(id: string): Promise<Appointment | undefined>;
+  updateAppointmentStatus(id: string, status: string): Promise<Appointment>;
+  cancelAppointment(id: string): Promise<Appointment>;
+
+  // Appointment Scheduling - Blocked Time
+  createBlockedTime(blocked: InsertBlockedTime): Promise<BlockedTime>;
+  getBlockedTimes(therapistId: string): Promise<BlockedTime[]>;
+  deleteBlockedTime(id: string): Promise<void>;
+
+  // Appointment Scheduling - Availability Checking
+  getAvailableSlots(therapistId: string, date: string): Promise<TimeSlot[]>;
 }
 
 export interface TherapistFilters {
@@ -220,6 +263,205 @@ export class DbStorage implements IStorage {
   async isAdmin(userId: string): Promise<boolean> {
     const adminUser = await this.getAdminUserByUserId(userId);
     return !!adminUser;
+  }
+
+  // Appointment Scheduling - Availability
+  async createAvailability(insertAvailability: InsertAvailability): Promise<TherapistAvailability> {
+    const [availability] = await db.insert(therapistAvailability).values(insertAvailability).returning();
+    return availability;
+  }
+
+  async getAvailability(therapistId: string): Promise<TherapistAvailability[]> {
+    return await db
+      .select()
+      .from(therapistAvailability)
+      .where(and(
+        eq(therapistAvailability.therapistId, therapistId),
+        eq(therapistAvailability.isActive, true)
+      ));
+  }
+
+  async updateAvailability(id: string, data: Partial<InsertAvailability>): Promise<TherapistAvailability> {
+    const [updated] = await db
+      .update(therapistAvailability)
+      .set(data)
+      .where(eq(therapistAvailability.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAvailability(id: string): Promise<void> {
+    await db.delete(therapistAvailability).where(eq(therapistAvailability.id, id));
+  }
+
+  // Appointment Scheduling - Booking Settings
+  async getBookingSettings(therapistId: string): Promise<BookingSettings | undefined> {
+    const [settings] = await db
+      .select()
+      .from(therapistBookingSettings)
+      .where(eq(therapistBookingSettings.therapistId, therapistId))
+      .limit(1);
+    return settings;
+  }
+
+  async createBookingSettings(insertSettings: InsertBookingSettings): Promise<BookingSettings> {
+    const [settings] = await db.insert(therapistBookingSettings).values(insertSettings).returning();
+    return settings;
+  }
+
+  async updateBookingSettings(therapistId: string, data: Partial<InsertBookingSettings>): Promise<BookingSettings> {
+    const [updated] = await db
+      .update(therapistBookingSettings)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(therapistBookingSettings.therapistId, therapistId))
+      .returning();
+    return updated;
+  }
+
+  // Appointment Scheduling - Appointments
+  async createAppointment(insertAppointment: InsertAppointment): Promise<Appointment> {
+    const [appointment] = await db.insert(appointments).values(insertAppointment).returning();
+    return appointment;
+  }
+
+  async getAppointments(therapistId: string, status?: string): Promise<Appointment[]> {
+    const conditions = [eq(appointments.therapistId, therapistId)];
+
+    if (status) {
+      conditions.push(eq(appointments.status, status as any));
+    }
+
+    return await db
+      .select()
+      .from(appointments)
+      .where(and(...conditions))
+      .orderBy(appointments.appointmentDate, appointments.startTime);
+  }
+
+  async getAppointment(id: string): Promise<Appointment | undefined> {
+    const [appointment] = await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.id, id))
+      .limit(1);
+    return appointment;
+  }
+
+  async updateAppointmentStatus(id: string, status: string): Promise<Appointment> {
+    const [updated] = await db
+      .update(appointments)
+      .set({ status: status as any, updatedAt: new Date() })
+      .where(eq(appointments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async cancelAppointment(id: string): Promise<Appointment> {
+    const [updated] = await db
+      .update(appointments)
+      .set({ status: 'cancelled', updatedAt: new Date() })
+      .where(eq(appointments.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Appointment Scheduling - Blocked Time
+  async createBlockedTime(insertBlocked: InsertBlockedTime): Promise<BlockedTime> {
+    const [blocked] = await db.insert(blockedTimeSlots).values(insertBlocked).returning();
+    return blocked;
+  }
+
+  async getBlockedTimes(therapistId: string): Promise<BlockedTime[]> {
+    return await db
+      .select()
+      .from(blockedTimeSlots)
+      .where(eq(blockedTimeSlots.therapistId, therapistId));
+  }
+
+  async deleteBlockedTime(id: string): Promise<void> {
+    await db.delete(blockedTimeSlots).where(eq(blockedTimeSlots.id, id));
+  }
+
+  // Appointment Scheduling - Availability Checking
+  async getAvailableSlots(therapistId: string, date: string): Promise<TimeSlot[]> {
+    // Get the day of week (0 = Sunday, 1 = Monday, etc.)
+    const dateObj = new Date(date + 'T00:00:00');
+    const dayOfWeek = dateObj.getDay();
+
+    // Get therapist's availability for this day
+    const availability = await db
+      .select()
+      .from(therapistAvailability)
+      .where(and(
+        eq(therapistAvailability.therapistId, therapistId),
+        eq(therapistAvailability.dayOfWeek, dayOfWeek),
+        eq(therapistAvailability.isActive, true)
+      ));
+
+    if (availability.length === 0) {
+      return [];
+    }
+
+    // Get existing appointments for this date
+    const existingAppointments = await db
+      .select()
+      .from(appointments)
+      .where(and(
+        eq(appointments.therapistId, therapistId),
+        eq(appointments.appointmentDate, date),
+        or(
+          eq(appointments.status, 'pending'),
+          eq(appointments.status, 'confirmed')
+        )
+      ));
+
+    // Get blocked times for this date
+    const blocked = await db
+      .select()
+      .from(blockedTimeSlots)
+      .where(and(
+        eq(blockedTimeSlots.therapistId, therapistId),
+        lte(blockedTimeSlots.startDate, date),
+        gte(blockedTimeSlots.endDate, date)
+      ));
+
+    // Generate time slots
+    const slots: TimeSlot[] = [];
+
+    for (const avail of availability) {
+      const startHour = parseInt(avail.startTime.split(':')[0]);
+      const startMin = parseInt(avail.startTime.split(':')[1]);
+      const endHour = parseInt(avail.endTime.split(':')[0]);
+      const endMin = parseInt(avail.endTime.split(':')[1]);
+
+      let currentTime = startHour * 60 + startMin; // minutes from midnight
+      const endTime = endHour * 60 + endMin;
+
+      while (currentTime + (avail.slotDuration || 60) <= endTime) {
+        const hours = Math.floor(currentTime / 60);
+        const mins = currentTime % 60;
+        const timeStr = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+
+        // Check if this slot is already booked
+        const isBooked = existingAppointments.some(apt => apt.startTime === timeStr);
+
+        // Check if this slot is blocked
+        const isBlocked = blocked.some(b => {
+          if (!b.startTime || !b.endTime) return true; // Full day block
+          return timeStr >= b.startTime && timeStr < b.endTime;
+        });
+
+        slots.push({
+          time: timeStr,
+          available: !isBooked && !isBlocked,
+          duration: avail.slotDuration || 60
+        });
+
+        currentTime += avail.slotDuration || 60;
+      }
+    }
+
+    return slots.sort((a, b) => a.time.localeCompare(b.time));
   }
 }
 

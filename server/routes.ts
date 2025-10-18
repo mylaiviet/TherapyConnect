@@ -3,8 +3,10 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { insertTherapistSchema, insertUserSchema } from "@shared/schema";
 import type { TherapistFilters } from "./storage";
+import { db } from "../db";
 
 declare module 'express-session' {
   interface SessionData {
@@ -14,9 +16,23 @@ declare module 'express-session' {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Session store configuration
+  const PgSession = connectPgSimple(session);
+  const sessionStore = process.env.NODE_ENV === "production"
+    ? new PgSession({
+        conObject: {
+          connectionString: process.env.DATABASE_URL,
+          ssl: { rejectUnauthorized: false }
+        },
+        tableName: 'session',
+        createTableIfMissing: true,
+      })
+    : undefined; // Use default MemoryStore in development
+
   // Session middleware
   app.use(
     session({
+      store: sessionStore,
       secret: process.env.SESSION_SECRET || "therapyconnect-secret-key-change-in-production",
       resave: false,
       saveUninitialized: false,

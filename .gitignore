@@ -20,7 +20,9 @@ npm-debug.log*
 .idea
 
 # Claude Code
-.claude/
+.claude/*
+!.claude/instructions.md
+!.claude/commands/
 .local/
 
 # Sensitive data

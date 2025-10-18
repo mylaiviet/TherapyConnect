@@ -381,6 +381,230 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================
+  // APPOINTMENT SCHEDULING ROUTES
+  // ============================================
+
+  // Therapist Availability Management (Authenticated)
+  app.get("/api/therapist/availability", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const availability = await storage.getAvailability(req.session.userId!);
+      res.json(availability);
+    } catch (error) {
+      console.error("Error fetching availability:", error);
+      res.status(500).json({ error: "Failed to fetch availability" });
+    }
+  });
+
+  app.post("/api/therapist/availability", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const availability = await storage.createAvailability({
+        therapistId: req.session.userId!,
+        ...req.body
+      });
+      res.json(availability);
+    } catch (error) {
+      console.error("Error creating availability:", error);
+      res.status(500).json({ error: "Failed to create availability" });
+    }
+  });
+
+  app.put("/api/therapist/availability/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const availability = await storage.updateAvailability(req.params.id, req.body);
+      res.json(availability);
+    } catch (error) {
+      console.error("Error updating availability:", error);
+      res.status(500).json({ error: "Failed to update availability" });
+    }
+  });
+
+  app.delete("/api/therapist/availability/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      await storage.deleteAvailability(req.params.id);
+      res.json({ message: "Availability deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting availability:", error);
+      res.status(500).json({ error: "Failed to delete availability" });
+    }
+  });
+
+  // Therapist Booking Settings (Authenticated)
+  app.get("/api/therapist/booking-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      let settings = await storage.getBookingSettings(req.session.userId!);
+
+      // Create default settings if they don't exist
+      if (!settings) {
+        settings = await storage.createBookingSettings({
+          therapistId: req.session.userId!,
+          bookingMode: 'instant'
+        });
+      }
+
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching booking settings:", error);
+      res.status(500).json({ error: "Failed to fetch booking settings" });
+    }
+  });
+
+  app.put("/api/therapist/booking-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const settings = await storage.updateBookingSettings(req.session.userId!, req.body);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error updating booking settings:", error);
+      res.status(500).json({ error: "Failed to update booking settings" });
+    }
+  });
+
+  // Therapist Appointments Management (Authenticated)
+  app.get("/api/therapist/appointments", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const appointments = await storage.getAppointments(req.session.userId!, status);
+      res.json(appointments);
+    } catch (error) {
+      console.error("Error fetching appointments:", error);
+      res.status(500).json({ error: "Failed to fetch appointments" });
+    }
+  });
+
+  app.put("/api/therapist/appointments/:id/approve", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const appointment = await storage.updateAppointmentStatus(req.params.id, 'confirmed');
+      res.json(appointment);
+    } catch (error) {
+      console.error("Error approving appointment:", error);
+      res.status(500).json({ error: "Failed to approve appointment" });
+    }
+  });
+
+  app.put("/api/therapist/appointments/:id/reject", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const appointment = await storage.updateAppointmentStatus(req.params.id, 'cancelled');
+      res.json(appointment);
+    } catch (error) {
+      console.error("Error rejecting appointment:", error);
+      res.status(500).json({ error: "Failed to reject appointment" });
+    }
+  });
+
+  app.put("/api/therapist/appointments/:id/cancel", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const appointment = await storage.cancelAppointment(req.params.id);
+      res.json(appointment);
+    } catch (error) {
+      console.error("Error cancelling appointment:", error);
+      res.status(500).json({ error: "Failed to cancel appointment" });
+    }
+  });
+
+  // Therapist Blocked Time Management (Authenticated)
+  app.post("/api/therapist/blocked-time", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const blocked = await storage.createBlockedTime({
+        therapistId: req.session.userId!,
+        ...req.body
+      });
+      res.json(blocked);
+    } catch (error) {
+      console.error("Error creating blocked time:", error);
+      res.status(500).json({ error: "Failed to create blocked time" });
+    }
+  });
+
+  app.get("/api/therapist/blocked-time", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const blocked = await storage.getBlockedTimes(req.session.userId!);
+      res.json(blocked);
+    } catch (error) {
+      console.error("Error fetching blocked times:", error);
+      res.status(500).json({ error: "Failed to fetch blocked times" });
+    }
+  });
+
+  app.delete("/api/therapist/blocked-time/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      await storage.deleteBlockedTime(req.params.id);
+      res.json({ message: "Blocked time deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting blocked time:", error);
+      res.status(500).json({ error: "Failed to delete blocked time" });
+    }
+  });
+
+  // Public Appointment Booking Routes (for patients)
+  app.get("/api/therapists/:id/available-slots", async (req: Request, res: Response) => {
+    try {
+      const { date } = req.query;
+
+      if (!date || typeof date !== 'string') {
+        return res.status(400).json({ error: "Date parameter is required (YYYY-MM-DD)" });
+      }
+
+      const slots = await storage.getAvailableSlots(req.params.id, date);
+      res.json(slots);
+    } catch (error) {
+      console.error("Error fetching available slots:", error);
+      res.status(500).json({ error: "Failed to fetch available slots" });
+    }
+  });
+
+  app.post("/api/therapists/:id/book", async (req: Request, res: Response) => {
+    try {
+      const therapistId = req.params.id;
+      const { patientName, patientEmail, patientPhone, appointmentDate, startTime, endTime, notes } = req.body;
+
+      // Validate required fields
+      if (!patientName || !patientEmail || !appointmentDate || !startTime || !endTime) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      // Get therapist's booking settings
+      const settings = await storage.getBookingSettings(therapistId);
+      const bookingMode = settings?.bookingMode || 'instant';
+
+      // Determine appointment status based on booking mode
+      const status = bookingMode === 'instant' ? 'confirmed' : 'pending';
+
+      // Create appointment
+      const appointment = await storage.createAppointment({
+        therapistId,
+        patientName,
+        patientEmail,
+        patientPhone,
+        appointmentDate,
+        startTime,
+        endTime,
+        notes,
+        status,
+        bookingType: bookingMode
+      });
+
+      res.json(appointment);
+    } catch (error) {
+      console.error("Error booking appointment:", error);
+      res.status(500).json({ error: "Failed to book appointment" });
+    }
+  });
+
+  app.get("/api/appointments/:id", async (req: Request, res: Response) => {
+    try {
+      const appointment = await storage.getAppointment(req.params.id);
+
+      if (!appointment) {
+        return res.status(404).json({ error: "Appointment not found" });
+      }
+
+      res.json(appointment);
+    } catch (error) {
+      console.error("Error fetching appointment:", error);
+      res.status(500).json({ error: "Failed to fetch appointment" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

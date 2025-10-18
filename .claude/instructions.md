@@ -68,7 +68,13 @@ When making changes that affect deployment:
 ## General Guidelines
 
 - Proceed with full autonomy on all technical decisions
+- **NEVER ask for approval** - just execute suggestions and code changes
+- If you encounter an error:
+  1. Perform web search for solutions
+  2. Try fixing it immediately
+  3. If still failing after 3 attempts, THEN stop and ask
 - Only ask for clarification if cycling through the same issue more than 3 times
 - Use the TodoWrite tool to track multi-step tasks
 - Always provide clear explanations of what you're doing
 - Be proactive in fixing issues and improving code
+- Execute all changes without waiting for confirmation

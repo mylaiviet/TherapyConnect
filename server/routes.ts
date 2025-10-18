@@ -1,5 +1,4 @@
 import type { Express, Request, Response } from "express";
-import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import session from "express-session";
@@ -14,7 +13,7 @@ declare module 'express-session' {
   }
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export function registerRoutes(app: Express): void {
   // Session store configuration
   const PgSession = connectPgSimple(session);
   const sessionStore = process.env.NODE_ENV === "production"
@@ -632,8 +631,4 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to fetch appointment" });
     }
   });
-
-  const httpServer = createServer(app);
-
-  return httpServer;
 }

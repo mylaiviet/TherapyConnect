@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,67 +17,93 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { UserPlus, Eye, EyeOff } from "lucide-react";
+import { KeyRound, Eye, EyeOff, CheckCircle } from "lucide-react";
 
-const signupSchema = z.object({
+const resetSchema = z.object({
   email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  newPassword: z.string().min(6, "Password must be at least 6 characters"),
   confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
+}).refine((data) => data.newPassword === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
 });
 
-type SignupFormData = z.infer<typeof signupSchema>;
+type ResetFormData = z.infer<typeof resetSchema>;
 
-export default function Signup() {
-  const [, navigate] = useLocation();
+export default function ResetPassword() {
   const { toast } = useToast();
-  const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
-  const form = useForm<SignupFormData>({
-    resolver: zodResolver(signupSchema),
+  const form = useForm<ResetFormData>({
+    resolver: zodResolver(resetSchema),
     defaultValues: {
       email: "",
-      password: "",
+      newPassword: "",
       confirmPassword: "",
     },
   });
 
-  const signupMutation = useMutation({
-    mutationFn: (data: { email: string; password: string }) => 
-      apiRequest("POST", "/api/auth/signup", data),
+  const resetMutation = useMutation({
+    mutationFn: (data: { email: string; newPassword: string }) =>
+      apiRequest("POST", "/api/auth/reset-password", data),
     onSuccess: () => {
       toast({
-        title: "Account created successfully",
-        description: "Please complete your therapist profile",
+        title: "Password reset successful",
+        description: "Your password has been updated. You can now sign in.",
       });
-      navigate("/dashboard/profile");
+      setResetSuccess(true);
+      form.reset();
     },
     onError: (error: any) => {
       toast({
-        title: "Signup failed",
-        description: error.message || "An error occurred during signup",
+        title: "Password reset failed",
+        description: error.message || "An error occurred. Please try again.",
         variant: "destructive",
       });
     },
   });
 
-  const onSubmit = (data: SignupFormData) => {
-    signupMutation.mutate({
+  const onSubmit = (data: ResetFormData) => {
+    resetMutation.mutate({
       email: data.email,
-      password: data.password,
+      newPassword: data.newPassword,
     });
   };
+
+  if (resetSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-secondary/5 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+            </div>
+            <CardTitle className="text-2xl">Password Reset Successful</CardTitle>
+            <CardDescription>
+              Your password has been updated successfully
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/login">
+              <Button className="w-full">
+                Go to Sign In
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-secondary/5 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Join as a Therapist</CardTitle>
+          <CardTitle className="text-2xl">Reset Password</CardTitle>
           <CardDescription>
-            Create your account to get started with your profile
+            Enter your email and new password to reset your account
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -94,7 +120,6 @@ export default function Signup() {
                         type="email"
                         placeholder="your.email@example.com"
                         {...field}
-                        data-testid="input-signup-email"
                       />
                     </FormControl>
                     <FormMessage />
@@ -104,25 +129,24 @@ export default function Signup() {
 
               <FormField
                 control={form.control}
-                name="password"
+                name="newPassword"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel>New Password</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <Input
-                          type={showPassword ? "text" : "password"}
+                          type={showNewPassword ? "text" : "password"}
                           placeholder="••••••••"
                           {...field}
-                          data-testid="input-signup-password"
                         />
                         <button
                           type="button"
-                          onClick={() => setShowPassword(!showPassword)}
+                          onClick={() => setShowNewPassword(!showNewPassword)}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                          aria-label={showPassword ? "Hide password" : "Show password"}
+                          aria-label={showNewPassword ? "Hide password" : "Show password"}
                         >
-                          {showPassword ? (
+                          {showNewPassword ? (
                             <EyeOff className="h-4 w-4" />
                           ) : (
                             <Eye className="h-4 w-4" />
@@ -140,14 +164,13 @@ export default function Signup() {
                 name="confirmPassword"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Confirm Password</FormLabel>
+                    <FormLabel>Confirm New Password</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <Input
                           type={showConfirmPassword ? "text" : "password"}
                           placeholder="••••••••"
                           {...field}
-                          data-testid="input-signup-confirm-password"
                         />
                         <button
                           type="button"
@@ -171,15 +194,14 @@ export default function Signup() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={signupMutation.isPending}
-                data-testid="button-signup-submit"
+                disabled={resetMutation.isPending}
               >
-                {signupMutation.isPending ? (
-                  "Creating account..."
+                {resetMutation.isPending ? (
+                  "Resetting password..."
                 ) : (
                   <>
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Create Account
+                    <KeyRound className="mr-2 h-4 w-4" />
+                    Reset Password
                   </>
                 )}
               </Button>
@@ -187,12 +209,9 @@ export default function Signup() {
           </Form>
 
           <div className="mt-6 text-center text-sm">
-            <p className="text-muted-foreground">
-              Already have an account?{" "}
-              <Link href="/login" className="text-primary hover:underline" data-testid="link-login">
-                Sign in
-              </Link>
-            </p>
+            <Link href="/login" className="text-primary hover:underline">
+              Back to Sign In
+            </Link>
           </div>
         </CardContent>
       </Card>

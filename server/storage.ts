@@ -15,7 +15,8 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserById(id: string): Promise<User | undefined>;
-  
+  updateUserPassword(id: string, hashedPassword: string): Promise<void>;
+
   // Therapist profiles
   createTherapist(therapist: InsertTherapist): Promise<Therapist>;
   getTherapistById(id: string): Promise<Therapist | undefined>;
@@ -63,6 +64,13 @@ export class DbStorage implements IStorage {
   async getUserById(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
     return user;
+  }
+
+  async updateUserPassword(id: string, hashedPassword: string): Promise<void> {
+    await db
+      .update(users)
+      .set({ password: hashedPassword })
+      .where(eq(users.id, id));
   }
 
   // Therapist profiles

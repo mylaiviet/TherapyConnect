@@ -11,6 +11,7 @@ import TherapistSearch from "@/pages/therapist-search";
 import TherapistProfile from "@/pages/therapist-profile";
 import Login from "@/pages/login";
 import Signup from "@/pages/signup";
+import ResetPassword from "@/pages/reset-password";
 import TherapistDashboard from "@/pages/therapist-dashboard";
 import ProfileEditor from "@/pages/profile-editor";
 import AdminDashboard from "@/pages/admin-dashboard";
@@ -23,6 +24,7 @@ function Router() {
       <Route path="/therapists/:id" component={TherapistProfile} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/dashboard" component={TherapistDashboard} />
       <Route path="/dashboard/profile" component={ProfileEditor} />
       <Route path="/admin" component={AdminDashboard} />

@@ -4,8 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Eye, Edit, CheckCircle, Clock, XCircle, User } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Eye, Edit, CheckCircle, Clock, XCircle, User, Calendar as CalendarIcon, Settings } from "lucide-react";
 import { type Therapist } from "@shared/schema";
+import { AvailabilityManager } from "@/components/scheduling/AvailabilityManager";
+import { BookingSettings } from "@/components/scheduling/BookingSettings";
+import { AppointmentsList } from "@/components/scheduling/AppointmentsList";
 
 export default function TherapistDashboard() {
   const { data: profile, isLoading } = useQuery<Therapist>({
@@ -204,6 +208,38 @@ export default function TherapistDashboard() {
             </CardContent>
           </Card>
         )}
+
+        {/* Appointments & Scheduling Section */}
+        <div className="mt-8">
+          <Tabs defaultValue="appointments" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="appointments">
+                <CalendarIcon className="h-4 w-4 mr-2" />
+                Appointments
+              </TabsTrigger>
+              <TabsTrigger value="availability">
+                <Clock className="h-4 w-4 mr-2" />
+                Availability
+              </TabsTrigger>
+              <TabsTrigger value="settings">
+                <Settings className="h-4 w-4 mr-2" />
+                Settings
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="appointments" className="mt-6">
+              <AppointmentsList />
+            </TabsContent>
+
+            <TabsContent value="availability" className="mt-6">
+              <AvailabilityManager />
+            </TabsContent>
+
+            <TabsContent value="settings" className="mt-6">
+              <BookingSettings />
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
     </div>
   );

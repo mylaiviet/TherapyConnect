@@ -28,6 +28,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { BookingCalendar } from "@/components/scheduling/BookingCalendar";
 
 export default function TherapistProfile() {
   const [, params] = useRoute("/therapists/:id");
@@ -186,6 +187,10 @@ export default function TherapistProfile() {
                 <TabsTrigger value="specialties" data-testid="tab-specialties">Specialties</TabsTrigger>
                 <TabsTrigger value="qualifications" data-testid="tab-qualifications">Qualifications</TabsTrigger>
                 <TabsTrigger value="fees" data-testid="tab-fees">Fees & Insurance</TabsTrigger>
+                <TabsTrigger value="booking" data-testid="tab-booking">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Book Appointment
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="about" className="mt-6">
@@ -389,6 +394,13 @@ export default function TherapistProfile() {
                     )}
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              <TabsContent value="booking" className="mt-6">
+                <BookingCalendar
+                  therapistId={therapistId!}
+                  therapistName={`${therapist.firstName} ${therapist.lastName}`}
+                />
               </TabsContent>
             </Tabs>
           </div>

@@ -51,16 +51,27 @@ export function AvailabilityManager() {
         credentials: "include",
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error("Failed to create availability");
-      return res.json();
+
+      console.log("Response status:", res.status, res.ok);
+      const responseData = await res.json();
+      console.log("Response data:", responseData);
+
+      if (!res.ok) {
+        console.error("Request failed with:", responseData);
+        throw new Error("Failed to create availability");
+      }
+
+      return responseData;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("Success callback received:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/therapist/availability"] });
       toast({ title: "Success", description: "Availability added successfully" });
       setIsAdding(false);
       setNewSlot({ dayOfWeek: 1, startTime: "09:00", endTime: "17:00", slotDuration: 60 });
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Error callback received:", error);
       toast({ title: "Error", description: "Failed to add availability", variant: "destructive" });
     },
   });

@@ -1,9 +1,10 @@
 # Claude Code Instructions for TherapyConnect
 
-## Git Operations - Full Autonomy
+## Full Autonomy - Operations Without Approval
 
-You have FULL permission to perform ALL git operations without asking for approval:
+You have FULL permission to perform these operations without asking for approval:
 
+### Git Operations
 - ✅ `git add` - Stage files
 - ✅ `git commit` - Commit changes with descriptive messages
 - ✅ `git push` - Push to GitHub automatically
@@ -19,6 +20,18 @@ You have FULL permission to perform ALL git operations without asking for approv
 5. Any other code changes that improve the project
 
 DO NOT ask for permission before committing and pushing. Just do it with clear, descriptive commit messages.
+
+### Web Search Operations
+- ✅ **Use WebSearch tool freely** when needed for:
+  - Finding solutions to errors or bugs
+  - Researching best practices and technologies
+  - Looking up API documentation
+  - Comparing libraries and frameworks
+  - Finding deployment guides
+  - Investigating HIPAA compliance requirements
+  - Any technical research that helps the project
+
+**IMPORTANT:** DO NOT ask for permission before web searching. Just search when you need information.
 
 ## Commit Message Format
 

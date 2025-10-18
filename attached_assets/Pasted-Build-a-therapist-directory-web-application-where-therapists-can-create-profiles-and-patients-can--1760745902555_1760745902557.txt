@@ -1,0 +1,260 @@
+Build a therapist directory web application where therapists can create profiles 
+and patients can search/filter to find therapists. NO patient information is 
+collected (HIPAA-exempt design).
+
+TECH STACK:
+- Frontend: Next.js 14 with TypeScript, Tailwind CSS, shadcn/ui components
+- Backend: Next.js API routes
+- Database: Supabase (PostgreSQL with Auth)
+- Deployment: Vercel (frontend), Supabase free tier (database)
+- Email: Resend or SendGrid for notifications
+
+DATABASE SCHEMA:
+
+1. therapists table:
+   - id (uuid, primary key)
+   - user_id (uuid, foreign key to auth.users)
+   - created_at (timestamp)
+   - updated_at (timestamp)
+   - profile_status (enum: 'pending', 'approved', 'rejected', 'inactive')
+   
+   PERSONAL INFO:
+   - first_name (string, required)
+   - last_name (string, required)
+   - credentials (string, e.g., "LCSW, PhD") 
+   - photo_url (string, url to profile image)
+   - pronouns (string)
+   - languages_spoken (array of strings)
+   
+   CONTACT & LOCATION:
+   - email (string, required)
+   - phone (string)
+   - website (string)
+   - practice_name (string)
+   - street_address (string)
+   - city (string, required)
+   - state (string, required)
+   - zip_code (string, required)
+   - country (string, default 'USA')
+   - latitude (decimal)
+   - longitude (decimal)
+   
+   LICENSING & VERIFICATION:
+   - license_type (string, e.g., "LCSW", "PhD", "LMFT", "LPC")
+   - license_number (string, required)
+   - license_state (string, required)
+   - npi_number (string, optional)
+   - years_in_practice (integer)
+   - graduate_school (string)
+   - graduation_year (integer)
+   
+   PRACTICE DETAILS:
+   - bio (text, max 500 words)
+   - therapeutic_approach (text, 200 words)
+   - session_types (array: 'individual', 'couples', 'family', 'group')
+   - modalities (array: 'in-person', 'telehealth', 'phone')
+   - accepting_new_clients (boolean, default true)
+   
+   SPECIALIZATIONS:
+   - top_specialties (array of strings, max 5, e.g., ['Anxiety', 'Depression', 'Trauma'])
+   - issues_treated (array of strings, e.g., ['PTSD', 'OCD', 'Grief', 'Life Transitions'])
+   - communities_served (array, e.g., ['LGBTQ+ Allied', 'BIPOC', 'Veterans'])
+   - age_groups (array: 'children', 'teens', 'adults', 'seniors')
+   
+   THERAPY APPROACHES:
+   - therapy_types (array of strings, e.g., ['CBT', 'DBT', 'Psychodynamic', 'EMDR', 'IFS'])
+   - treatment_orientation (string, e.g., 'Integrative', 'Trauma-focused')
+   
+   FEES & INSURANCE:
+   - individual_session_fee (integer, in dollars)
+   - couples_session_fee (integer)
+   - offers_sliding_scale (boolean)
+   - sliding_scale_min (integer)
+   - insurance_accepted (array of strings, e.g., ['Aetna', 'Blue Cross', 'Cigna', 'Out of Network'])
+   - payment_methods (array: 'cash', 'credit card', 'HSA', 'check', 'venmo', 'zelle')
+   
+   AVAILABILITY:
+   - available_days (array: 'monday', 'tuesday', etc.)
+   - available_times (array: 'morning', 'afternoon', 'evening', 'weekend')
+   - waitlist_status (boolean)
+   
+   MEDIA:
+   - video_intro_url (string, optional)
+   - profile_views (integer, default 0)
+   - last_login (timestamp)
+
+2. admin_users table:
+   - id (uuid)
+   - user_id (uuid, foreign key)
+   - role (enum: 'admin', 'super_admin')
+
+CORE FEATURES TO BUILD:
+
+1. PUBLIC PATIENT-FACING PAGES:
+
+   a) Homepage (/):
+      - Hero section with search bar (location + specialty)
+      - "How it works" section
+      - Featured specialties grid
+      - Stats (e.g., "500+ verified therapists")
+      - CTA: "Find your therapist" and "Join as a therapist"
+   
+   b) Search Results Page (/therapists):
+      - Left sidebar with filters:
+        * Location (zip code + radius slider 5-50 miles)
+        * Specializations (checkboxes from predefined list)
+        * Issues treated (checkboxes)
+        * Insurance accepted (checkboxes)
+        * Session type (individual/couples/family)
+        * Modality (in-person/telehealth)
+        * Age groups served
+        * Gender/pronouns
+        * Languages spoken
+        * Price range (slider $0-$300)
+        * Accepting new clients toggle
+        * Community focus (LGBTQ+, BIPOC, etc.)
+      - Results grid showing therapist cards:
+        * Photo, name, credentials
+        * Top 3 specialties
+        * Location (city, state)
+        * Session fee
+        * "Accepting new clients" badge
+        * "View Profile" button
+      - Sort by: Relevance, Distance, Price (low-high), Recently joined
+      - Pagination or infinite scroll
+   
+   c) Therapist Profile Page (/therapists/[id]):
+      - Profile header: Photo, name, credentials, location
+      - "Contact Therapist" button (shows email + phone in modal)
+      - Quick facts sidebar:
+        * Session fee
+        * Insurance accepted
+        * Accepting new clients status
+        * Years in practice
+        * Modalities offered
+      - Tabs:
+        * About: Bio, approach, what to expect
+        * Specialties: Detailed list of issues treated
+        * Qualifications: License info, education, certifications
+        * Fees & Insurance: Detailed pricing, payment methods
+        * Availability: Days/times available
+      - Video introduction (if provided)
+      - "Share profile" buttons (copy link, email)
+      - Report inappropriate content button
+
+2. THERAPIST DASHBOARD (/dashboard):
+
+   a) Overview page:
+      - Profile completion meter
+      - Profile views this month (chart)
+      - Profile status badge (pending/approved/active)
+      - Quick actions: Edit profile, Toggle availability
+   
+   b) Profile Editor (/dashboard/profile):
+      - Multi-step form with progress indicator:
+        * Step 1: Basic Info (name, credentials, photo upload, contact)
+        * Step 2: Practice Details (bio, approach, specializations)
+        * Step 3: Licensing (license numbers, verification docs upload)
+        * Step 4: Logistics (location, fees, insurance, availability)
+        * Step 5: Review & Submit
+      - Auto-save drafts to localStorage
+      - Rich text editor for bio (with character counter)
+      - Tag input for specializations with autocomplete
+      - Toggle switches for boolean fields
+      - Preview button to see public-facing profile
+   
+   c) Settings (/dashboard/settings):
+      - Update email/password
+      - Notification preferences
+      - Toggle "Accepting new clients" status quickly
+      - Deactivate profile option
+      - Delete account (with confirmation)
+
+3. ADMIN PANEL (/admin):
+
+   a) Pending Approvals (/admin/pending):
+      - List of therapists awaiting verification
+      - For each: View profile, check license number, approve/reject
+      - Bulk actions
+   
+   b) All Therapists (/admin/therapists):
+      - Searchable table with filters
+      - Actions: View, Edit, Deactivate, Delete
+      - Export to CSV
+   
+   c) Analytics (/admin/analytics):
+      - Total therapists, active therapists
+      - New signups this month (chart)
+      - Most searched specializations
+      - Geographic distribution map
+
+4. AUTHENTICATION:
+
+   - Supabase Auth with email/password
+   - Therapist signup flow:
+     * Create account → Email verification → Profile creation → Admin approval
+   - "Sign in" for therapists only (patients don't need accounts)
+   - Password reset flow
+   - Protected routes middleware
+
+5. SEARCH & FILTER LOGIC:
+
+   - Geolocation search using PostGIS or zip code database
+   - Full-text search on bio, specializations, approach
+   - AND logic for multiple filters
+   - "No results" state with suggestions to broaden search
+   - Save search preferences to localStorage
+
+6. EMAIL NOTIFICATIONS:
+
+   - Welcome email after therapist signup
+   - Email when profile is approved/rejected
+   - Monthly analytics email to therapists (profile views)
+   - Admin notification when new therapist registers
+
+7. ADMIN FEATURES:
+
+   - License verification workflow (check state database links)
+   - Bulk import therapists via CSV
+   - Featured/spotlight therapist option
+   - Content moderation (flag inappropriate profiles)
+
+DESIGN REQUIREMENTS:
+
+- Clean, professional healthcare aesthetic
+- Mobile-first responsive design
+- Accessibility: WCAG AA compliant (semantic HTML, ARIA labels, keyboard nav)
+- Fast load times: Image optimization (next/image), lazy loading
+- SEO optimized: Dynamic meta tags, sitemap, robots.txt
+- Colors: Calming blues/greens, high contrast for readability
+
+SECURITY:
+
+- No PHI collected (HIPAA-exempt by design)
+- Rate limiting on API routes
+- SQL injection protection (parameterized queries)
+- XSS protection (sanitize user inputs)
+- HTTPS only
+- CORS configured properly
+
+NON-FEATURES (explicitly don't build):
+- Patient accounts or profiles
+- Messaging system between patients and therapists
+- Booking/scheduling system
+- Payment processing
+- Reviews or ratings
+- AI matching algorithm
+
+DEPLOYMENT:
+- Set up Vercel project connected to GitHub
+- Configure Supabase environment variables
+- Set up custom domain
+- Configure Google Analytics
+
+Start by:
+1. Creating the Next.js project structure
+2. Setting up Supabase with the schema above
+3. Building the authentication flow
+4. Creating the therapist profile submission form
+5. Building the public search/filter page
+6. Adding admin approval workflow

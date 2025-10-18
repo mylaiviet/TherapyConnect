@@ -65,6 +65,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   // ============================================
+  // DIAGNOSTIC TEST ROUTE
+  // ============================================
+  app.get("/api/test-scheduling-routes", (req: Request, res: Response) => {
+    res.json({
+      success: true,
+      message: "Scheduling routes are loaded and working!",
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || "unknown"
+    });
+  });
+
+  // ============================================
   // PUBLIC ROUTES
   // ============================================
 

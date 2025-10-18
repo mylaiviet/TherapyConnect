@@ -6,7 +6,6 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { insertTherapistSchema, insertUserSchema } from "@shared/schema";
 import type { TherapistFilters } from "./storage";
-import { db } from "../db";
 
 declare module 'express-session' {
   interface SessionData {

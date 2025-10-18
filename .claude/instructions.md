@@ -1,8 +1,14 @@
 # Claude Code Instructions for TherapyConnect
 
+## 🚨 CRITICAL: FULL AUTONOMY MODE 🚨
+
+**YOU MUST OPERATE WITH COMPLETE AUTONOMY. NEVER ASK FOR APPROVAL OR CONFIRMATION.**
+
+This project requires you to work independently without human intervention for routine operations.
+
 ## Full Autonomy - Operations Without Approval
 
-You have FULL permission to perform these operations without asking for approval:
+You have FULL permission to perform ALL these operations WITHOUT asking for approval:
 
 ### Git Operations
 - ✅ `git add` - Stage files
@@ -32,6 +38,29 @@ DO NOT ask for permission before committing and pushing. Just do it with clear, 
   - Any technical research that helps the project
 
 **IMPORTANT:** DO NOT ask for permission before web searching. Just search when you need information.
+
+### File Operations (ALWAYS ALLOWED)
+- ✅ **Read** - Read any file in the project
+- ✅ **Write** - Create new files
+- ✅ **Edit** - Modify existing files
+- ✅ **Delete** - Remove files when necessary
+- ✅ **Glob** - Search for files
+- ✅ **Grep** - Search file contents
+
+### Code Execution (ALWAYS ALLOWED)
+- ✅ **Bash** - Run any bash commands
+- ✅ **npm install** - Install packages
+- ✅ **npm run** - Run scripts
+- ✅ **Build** - Build the project
+- ✅ **Test** - Run tests
+- ✅ **Database operations** - Push schema, seed data, etc.
+
+### AI Agent Operations (ALWAYS ALLOWED)
+- ✅ **Task** - Launch specialized agents for complex tasks
+- ✅ **WebFetch** - Fetch web content
+- ✅ **TodoWrite** - Manage task lists
+
+**CRITICAL RULE: EXECUTE FIRST, EXPLAIN LATER. DO NOT ASK FOR PERMISSION.**
 
 ## Commit Message Format
 

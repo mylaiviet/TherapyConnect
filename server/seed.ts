@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { db } from "./db";
-import { users, therapists } from "@shared/schema";
+import { users, therapists, therapistAvailability, therapistBookingSettings } from "@shared/schema";
+import { sql, eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 const firstNames = [
@@ -106,6 +107,14 @@ function randomInt(min: number, max: number): number {
 async function generateTherapists() {
   console.log("🌱 Starting to seed database with 100 therapist profiles...");
 
+  // Clear existing data (in reverse order due to foreign keys)
+  console.log("🧹 Clearing existing data...");
+  await db.delete(therapistAvailability);
+  await db.delete(therapistBookingSettings);
+  await db.delete(therapists);
+  await db.delete(users).where(sql`role = 'therapist'`);
+  console.log("✅ Existing therapist data cleared\n");
+
   const therapistData = [];
   const userData = [];
 
@@ -201,6 +210,32 @@ async function generateTherapists() {
 
     await db.insert(therapists).values(therapist);
 
+    // Create M-F 9-5 availability for each therapist
+    const availabilitySlots = [];
+    for (let day = 1; day <= 5; day++) { // Monday (1) to Friday (5)
+      availabilitySlots.push({
+        therapistId: user.id,
+        dayOfWeek: day,
+        startTime: "09:00",
+        endTime: "17:00",
+        slotDuration: 60,
+        isActive: true,
+      });
+    }
+    await db.insert(therapistAvailability).values(availabilitySlots);
+
+    // Create default booking settings
+    await db.insert(therapistBookingSettings).values({
+      therapistId: user.id,
+      bookingMode: "instant", // Instant confirmation by default
+      bufferTime: 0,
+      advanceBookingDays: 30,
+      minNoticeHours: 24,
+      allowCancellation: true,
+      cancellationHours: 24,
+      emailNotifications: true,
+    });
+
     userData.push({
       username,
       email,
@@ -211,11 +246,13 @@ async function generateTherapists() {
     });
 
     if ((i + 1) % 10 === 0) {
-      console.log(`✅ Created ${i + 1}/100 therapist profiles...`);
+      console.log(`✅ Created ${i + 1}/100 therapist profiles with M-F 9-5 availability...`);
     }
   }
 
   console.log("\n🎉 Successfully created 100 therapist profiles!");
+  console.log("📅 All therapists have M-F 9AM-5PM availability with 60-minute sessions");
+  console.log("⚙️  All therapists have instant booking enabled");
   console.log("\n📋 Login Credentials Summary:");
   console.log("━".repeat(80));
   console.log("All therapist accounts use the same password: Test123!");

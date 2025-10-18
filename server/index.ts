@@ -4,6 +4,12 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+
+// Trust proxy - required for Render to handle HTTPS correctly
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 

@@ -1,6 +1,6 @@
 # TherapyConnect
 
-A modern web platform connecting patients with qualified mental health professionals. TherapyConnect helps therapists build their professional online profiles and allows patients to find the right therapist based on specialty, insurance, language, and more.
+A modern web platform connecting patients with qualified mental health professionals. TherapyConnect helps therapists build their professional online profiles, manage their availability, and accept appointment bookings from patients.
 
 ## Features
 
@@ -8,12 +8,21 @@ A modern web platform connecting patients with qualified mental health professio
 - **Advanced Search & Filtering**: Find therapists by specialty, insurance, location, language, age group, and more
 - **Detailed Profiles**: View therapist credentials, specialties, approach, rates, and availability
 - **Professional Verification**: All therapist profiles are admin-approved for quality assurance
+- **Appointment Booking**: Book appointments directly from therapist profiles with instant confirmation or request/approval workflow
+- **Calendar Integration**: View available time slots in real-time
 
 ### For Therapists
 - **Profile Management**: Create and manage comprehensive professional profiles
 - **Multi-Step Setup**: Easy 5-step profile creation wizard
 - **Profile Analytics**: Track profile views and completion status
 - **Dashboard**: Manage your information, credentials, and availability
+- **Appointment Scheduling**:
+  - Set weekly availability with custom time slots
+  - Configure instant booking or request/approval mode
+  - Manage all appointments (approve, reject, cancel)
+  - Block time for vacations or breaks
+  - Set buffer time between appointments
+  - Configure advance booking windows
 
 ### For Administrators
 - **Approval Workflow**: Review and approve/reject therapist profiles
@@ -30,18 +39,19 @@ A modern web platform connecting patients with qualified mental health professio
 - **TanStack Query** for data fetching and caching
 - **React Hook Form** with Zod validation
 - **Wouter** for routing
+- **react-calendar** for appointment booking UI
+- **date-fns** for date handling
 
 ### Backend
 - **Node.js 20** with Express.js
 - **TypeScript** throughout
-- **PostgreSQL** database
+- **PostgreSQL** database (Supabase)
 - **Drizzle ORM** for type-safe database queries
 - **bcryptjs** for password hashing
-- **express-session** for authentication
+- **express-session** with **connect-pg-simple** for persistent sessions
 
 ### Additional Tools
 - **Lucide React** for icons
-- **date-fns** for date handling
 - **Recharts** for analytics
 - **Framer Motion** for animations
 
@@ -56,8 +66,8 @@ A modern web platform connecting patients with qualified mental health professio
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/therapyconnect.git
-cd therapyconnect
+git clone https://github.com/mylaiviet/TherapyConnect.git
+cd TherapyConnect
 ```
 
 ### 2. Install Dependencies
@@ -85,10 +95,8 @@ PORT=5000
 
 **To generate a secure SESSION_SECRET:**
 ```bash
-# On Mac/Linux
+# On Mac/Linux/Windows Git Bash
 openssl rand -base64 32
-
-# Or use any random string generator
 ```
 
 ### 4. Set Up Database
@@ -98,7 +106,7 @@ openssl rand -base64 32
 1. Create a free account at [supabase.com](https://supabase.com)
 2. Create a new project
 3. Go to Settings > Database > Connection String
-4. Copy the connection string and add it to your `.env` file
+4. Copy the URI connection string and add it to your `.env` file
 5. Run migrations:
 
 ```bash
@@ -134,7 +142,7 @@ This creates an admin user:
 npm run dev
 ```
 
-The application will be available at `http://localhost:5000`
+The application will be available at `http://localhost:5173` (frontend) with API on `http://localhost:5000`
 
 ## Available Scripts
 
@@ -158,26 +166,33 @@ npm run check        # Run TypeScript type checking
 
 ```
 therapyconnect/
-├── client/                 # Frontend React application
+├── client/                    # Frontend React application
 │   ├── src/
-│   │   ├── pages/         # Page components (10 pages)
-│   │   ├── components/    # UI components (49+ components)
-│   │   ├── lib/           # Utilities and configurations
-│   │   ├── hooks/         # Custom React hooks
-│   │   ├── App.tsx        # Main router
-│   │   └── main.tsx       # Entry point
+│   │   ├── pages/            # Page components (11 pages)
+│   │   ├── components/       # UI components (53+ components)
+│   │   │   ├── scheduling/   # Appointment scheduling components
+│   │   │   │   ├── AvailabilityManager.tsx
+│   │   │   │   ├── BookingSettings.tsx
+│   │   │   │   ├── AppointmentsList.tsx
+│   │   │   │   └── BookingCalendar.tsx
+│   │   │   └── ui/           # Shadcn UI components
+│   │   ├── lib/              # Utilities and configurations
+│   │   ├── hooks/            # Custom React hooks
+│   │   ├── App.tsx           # Main router
+│   │   └── main.tsx          # Entry point
 │   └── index.html
-├── server/                # Express backend
-│   ├── index.ts          # Server entry point
-│   ├── routes.ts         # API endpoints (24 routes)
-│   ├── storage.ts        # Database operations
-│   ├── db.ts             # Database connection
-│   └── vite.ts           # Vite dev server setup
-├── shared/               # Shared code between client/server
-│   └── schema.ts         # Database schemas, types, validators
-├── migrations/           # Database migration files
-├── scripts/              # Utility scripts
-└── dist/                 # Production build output (generated)
+├── server/                   # Express backend
+│   ├── index.ts             # Server entry point
+│   ├── routes.ts            # API endpoints (40+ routes)
+│   ├── storage.ts           # Database operations (50+ methods)
+│   ├── db.ts                # Database connection
+│   └── vite.ts              # Vite dev server setup
+├── shared/                  # Shared code between client/server
+│   └── schema.ts            # Database schemas, types, validators (8 tables)
+├── migrations/              # Database migration files
+├── scripts/                 # Utility scripts
+├── SCHEDULING_DEPLOYMENT_GUIDE.md  # Comprehensive scheduling deployment docs
+└── dist/                    # Production build output (generated)
 ```
 
 ## API Endpoints
@@ -185,6 +200,8 @@ therapyconnect/
 ### Public Routes
 - `GET /api/therapists` - Get all approved therapists (with filters)
 - `GET /api/therapists/:id` - Get single therapist profile
+- `GET /api/therapists/:id/available-slots?date=YYYY-MM-DD` - Get available time slots
+- `POST /api/therapists/:id/book` - Book an appointment
 
 ### Authentication
 - `POST /api/auth/signup` - Register new therapist account
@@ -197,6 +214,27 @@ therapyconnect/
 - `POST /api/therapist/profile` - Create/update profile
 - `POST /api/therapist/submit` - Submit profile for approval
 - `DELETE /api/therapist/profile` - Delete profile
+
+#### Availability Management
+- `GET /api/therapist/availability` - Get weekly availability
+- `POST /api/therapist/availability` - Add availability slot
+- `PUT /api/therapist/availability/:id` - Update availability
+- `DELETE /api/therapist/availability/:id` - Delete availability
+
+#### Booking Settings
+- `GET /api/therapist/booking-settings` - Get booking preferences
+- `PUT /api/therapist/booking-settings` - Update booking preferences
+
+#### Appointments
+- `GET /api/therapist/appointments` - Get all appointments (with status filter)
+- `PUT /api/therapist/appointments/:id/approve` - Approve pending appointment
+- `PUT /api/therapist/appointments/:id/reject` - Reject pending appointment
+- `PUT /api/therapist/appointments/:id/cancel` - Cancel appointment
+
+#### Blocked Time
+- `GET /api/therapist/blocked-time` - Get blocked time slots
+- `POST /api/therapist/blocked-time` - Add blocked time (vacation, etc.)
+- `DELETE /api/therapist/blocked-time/:id` - Remove blocked time
 
 ### Admin Routes (Protected)
 - `GET /api/admin/therapists` - Get all therapists
@@ -217,117 +255,171 @@ therapyconnect/
 **admin_users**
 - Administrator accounts
 
-See `migrations/0000_nasty_smiling_tiger.sql` for full schema.
+**therapist_availability**
+- Weekly availability schedule (day of week, time slots)
+
+**appointments**
+- Patient appointment bookings (with status tracking)
+
+**therapist_booking_settings**
+- Booking preferences (instant vs request mode, buffer time, etc.)
+
+**blocked_time_slots**
+- Blocked time for vacations, breaks, etc.
+
+**session**
+- Persistent session storage (auto-created by connect-pg-simple)
+
+See `shared/schema.ts` for complete schema definitions.
 
 ## Deployment
 
-### Recommended Platforms
+### Production Deployment on Render.com
 
-This is a full-stack application that requires:
-1. Node.js runtime for the Express backend
-2. PostgreSQL database
-3. Static file hosting for the frontend
+This application is production-ready and deployed on Render. For detailed deployment instructions and troubleshooting, see [SCHEDULING_DEPLOYMENT_GUIDE.md](SCHEDULING_DEPLOYMENT_GUIDE.md).
 
-**Recommended Options:**
+**Live URL**: https://therapyconnect-1ec4.onrender.com
 
-#### 1. Replit (Easiest - Already Configured)
-- Configuration already included in `.replit`
-- Automatic builds and deployments
-- Built-in database options
+#### Quick Deploy Checklist
 
-#### 2. Railway.app
-1. Connect your GitHub repository
-2. Add PostgreSQL service
-3. Set environment variables
-4. Deploy automatically on push
+1. **Set up PostgreSQL database** (Supabase recommended)
+2. **Set environment variables** in Render:
+   ```env
+   DATABASE_URL=postgresql://...
+   SESSION_SECRET=<generate-with-openssl-rand-base64-32>
+   NODE_ENV=production
+   ```
+3. **Build Command**: `npm run build`
+4. **Start Command**: `npm run start`
+5. **Deploy** - Render auto-deploys on git push
 
-#### 3. Render.com
-1. Create a new Web Service
-2. Add PostgreSQL database
-3. Set build command: `npm run build`
-4. Set start command: `npm start`
-5. Add environment variables
+#### Critical Production Requirements
 
-#### 4. DigitalOcean App Platform
-- Full control over deployment
-- Managed PostgreSQL available
-- Auto-deploy from GitHub
+**Session Management** (see SCHEDULING_DEPLOYMENT_GUIDE.md for details):
+- ✅ PostgreSQL session store (`connect-pg-simple`)
+- ✅ Trust proxy setting (`app.set("trust proxy", 1)`)
+- ✅ SameSite cookie attribute (`sameSite: "none"` for production)
 
-### Deployment Checklist
-
-- [ ] Set up production PostgreSQL database
-- [ ] Set environment variables in hosting platform:
-  - `DATABASE_URL`
-  - `SESSION_SECRET` (generate new secure key!)
-  - `NODE_ENV=production`
-- [ ] Run database migrations: `npm run db:push`
-- [ ] Create admin account: `npx tsx scripts/create-admin.ts`
-- [ ] Test the application
-- [ ] Update admin password from default
+**Local Development**:
+- ✅ Vite API proxy configuration (forwards `/api` to Express)
 
 ### Environment Variables for Production
 
 ```env
-DATABASE_URL=postgresql://...      # Production database URL
+DATABASE_URL=postgresql://...      # Production database URL (Supabase)
 SESSION_SECRET=<secure-random>     # Generate new for production!
 NODE_ENV=production
-PORT=5000
+PORT=5000                         # Render provides this automatically
 ```
 
 **Security Notes:**
 - Never commit `.env` to version control (already in `.gitignore`)
 - Generate a new `SESSION_SECRET` for production
 - Change default admin password immediately
-- Use HTTPS in production (most platforms provide this automatically)
+- HTTPS is provided automatically by Render
 
-## Development Notes
+## Development Status
 
-### Design System
+### ✅ Completed Features (Production Ready)
 
-The application uses a healthcare-focused design system:
-- Primary color: Teal (#14B8A6)
-- Professional, accessible UI
-- Responsive design (mobile-first)
-- Consistent spacing and typography
+#### Phase 1: Core Platform
+- ✅ User authentication (signup, login, logout)
+- ✅ Therapist profile creation (5-step wizard)
+- ✅ Advanced search & filtering
+- ✅ Admin approval workflow
+- ✅ Therapist dashboard
+- ✅ Profile analytics
+- ✅ Responsive design
 
-See `design_guidelines.md` for complete design specifications.
+#### Phase 2: Appointment Scheduling System
+- ✅ Database schema (4 new tables)
+- ✅ Backend API (16 scheduling endpoints)
+- ✅ Therapist availability management
+- ✅ Booking settings (instant vs request mode)
+- ✅ Appointment management (approve/reject/cancel)
+- ✅ Patient booking calendar
+- ✅ Time slot availability calculation
+- ✅ Blocked time management
+- ✅ Session persistence (PostgreSQL)
+- ✅ Production deployment (Render)
 
-### Code Quality
+### 🚧 In Progress / Next Steps
 
-- **TypeScript**: Full type safety throughout
-- **ESLint**: Code linting configured
-- **Type Checking**: Run `npm run check` before commits
-- **No TODOs**: All features are complete
+#### Phase 3: Email Notifications (Planned)
+- ⏳ Email verification during signup
+- ⏳ Password reset functionality
+- ⏳ Appointment confirmation emails
+- ⏳ Reminder emails (24 hours before appointment)
+- ⏳ Profile approval/rejection notifications
+- ⏳ Cancellation notifications
 
-## Features Roadmap
+#### Phase 4: Calendar Sync (Optional)
+- ⏳ Google Calendar integration
+- ⏳ Outlook Calendar integration
+- ⏳ Two-way sync (TherapyConnect ↔ External calendars)
+- ⏳ Automatic availability updates
 
-Current version is production-ready with core features. Future enhancements could include:
+#### Phase 5: Enhanced Features (Future)
+- ⏳ Video consultation integration
+- ⏳ Reviews and ratings system
+- ⏳ Insurance verification
+- ⏳ Payment processing
+- ⏳ Therapist messaging system
+- ⏳ Advanced analytics dashboard
 
-- Email verification during signup
-- Password reset functionality
-- Email notifications for profile status changes
-- Advanced analytics for therapists
-- Patient appointment booking system
-- Video consultation integration
-- Reviews and ratings system
-- Insurance verification
+## Documentation
+
+- **README.md** (this file) - Project overview and setup
+- **SCHEDULING_DEPLOYMENT_GUIDE.md** - Complete scheduling system deployment guide
+  - System architecture
+  - Database schema details
+  - All deployment issues encountered and solutions
+  - Local development setup
+  - Production deployment checklist
+  - Common errors and fixes
+  - Testing procedures
+
+## Key Learnings & Best Practices
+
+### Session Management in Production
+1. **Always use persistent session storage** (PostgreSQL, Redis, etc.)
+2. **Configure trust proxy** for reverse proxy environments (Render, Vercel, etc.)
+3. **Set proper cookie attributes** (`sameSite: "none"` with `secure: true` for HTTPS)
+
+### Local Development
+1. **Use Vite proxy** to forward API requests from frontend dev server to backend
+2. **Keep MemoryStore** for development (faster, simpler)
+3. **Use environment variables** for different configs
+
+### Deployment
+1. **Generate secure SESSION_SECRET** (min 32 characters)
+2. **Set NODE_ENV=production** in hosting platform
+3. **Test session persistence** after deployment
+4. **Clear browser cookies** when testing auth changes
 
 ## Support
 
 For issues or questions:
-1. Check existing documentation
+1. Check [SCHEDULING_DEPLOYMENT_GUIDE.md](SCHEDULING_DEPLOYMENT_GUIDE.md) for deployment issues
 2. Review API endpoint documentation above
-3. Check database schema in `migrations/`
+3. Check database schema in `shared/schema.ts`
 4. Create an issue on GitHub
 
 ## License
 
-[Add your license here]
+MIT License
 
 ## Contributing
 
-[Add contribution guidelines here]
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run `npm run check` to verify types
+5. Submit a pull request
 
 ---
 
 **Built with** ❤️ **for mental health professionals and the patients they serve**
+
+**Live Demo**: https://therapyconnect-1ec4.onrender.com

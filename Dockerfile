@@ -52,7 +52,6 @@ RUN npm ci --only=production && \
 
 # Copy built artifacts from builder stage
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nodejs:nodejs /app/client/dist ./client/dist
 
 # Copy runtime files (needed for any dynamic imports or runtime requirements)
 COPY --chown=nodejs:nodejs server ./server

@@ -231,7 +231,11 @@ Phase 6: Testing        ░░░░░░░░░░░░░░░░░░�
   - ✅ Dockerfile (multi-stage build)
   - ✅ .dockerignore
   - ✅ docker-compose.yml
-- ⬜ Test Docker build
+- ✅ Test Docker build
+  - ✅ Fixed Vite output path issue
+  - ✅ Docker build successful
+  - ✅ docker-compose up successful
+  - ✅ Application running on port 5000
 - ⬜ Begin Phase 2: Application code
 
 ---
@@ -252,6 +256,9 @@ Phase 6: Testing        ░░░░░░░░░░░░░░░░░░�
 - **Note:** Will not merge to main until AWS deployment proven stable
 - **Note:** Database strategy TBD: Keep Neon or migrate to RDS
 - **Action Item:** Need to decide on ACM certificate approach (manual or automated)
+- **Fix:** Dockerfile path issue - Vite outputs to `dist/public/` not `client/dist/`, simplified Dockerfile to copy entire dist/ directory
+- **Test Result:** Docker build successful, docker-compose tested, application running correctly on port 5000
+- **Note:** /health endpoint not yet implemented (Phase 2 task)
 
 ---
 
@@ -267,6 +274,9 @@ Phase 6: Testing        ░░░░░░░░░░░░░░░░░░�
 | 2025-10-19 | Phase 1 | Created .dockerignore | Claude |
 | 2025-10-19 | Phase 1 | Created docker-compose.yml | Claude |
 | 2025-10-19 | Phase 1 | Phase 1 complete - Docker container ready | Claude |
+| 2025-10-19 | Phase 1 | Fixed Dockerfile Vite path issue | Claude |
+| 2025-10-19 | Phase 1 | Docker build tested successfully | Claude |
+| 2025-10-19 | Phase 1 | docker-compose tested - app running on port 5000 | Claude |
 
 ---
 

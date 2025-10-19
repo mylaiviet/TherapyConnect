@@ -1,6 +1,6 @@
 # AWS Migration Progress Tracker
 
-**Project:** TherapyConnect AWS Migration
+**Project:** KareMatch AWS Migration
 **Branch:** aws-migration
 **Started:** 2025-10-19
 **Status:** 🟡 IN PROGRESS

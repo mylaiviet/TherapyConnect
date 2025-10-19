@@ -44,7 +44,7 @@ SETUP → DOCKER → APP CODE → TERRAFORM → SCRIPTS → CONFIG → DOCS → 
 ### Files to Create
 
 #### 1.1 Dockerfile
-**Location:** `C:\TherapyConnect\Dockerfile`
+**Location:** `C:\KareMatch\Dockerfile`
 
 **Purpose:** Multi-stage build for production container
 
@@ -79,7 +79,7 @@ Stage 2: Runtime
 - Production-only dependencies in final image
 
 #### 1.2 .dockerignore
-**Location:** `C:\TherapyConnect\.dockerignore`
+**Location:** `C:\KareMatch\.dockerignore`
 
 **Purpose:** Exclude unnecessary files from Docker build
 
@@ -94,7 +94,7 @@ Stage 2: Runtime
 - Infrastructure files (terraform/, scripts/, render.yaml)
 
 #### 1.3 docker-compose.yml
-**Location:** `C:\TherapyConnect\docker-compose.yml`
+**Location:** `C:\KareMatch\docker-compose.yml`
 
 **Purpose:** Local development testing with PostgreSQL
 
@@ -123,7 +123,7 @@ app:
 ### Files to Modify/Create
 
 #### 2.1 server/lib/secrets.ts (NEW FILE)
-**Location:** `C:\TherapyConnect\server\lib\secrets.ts`
+**Location:** `C:\KareMatch\server\lib\secrets.ts`
 
 **Purpose:** AWS Secrets Manager integration
 
@@ -152,7 +152,7 @@ app:
 - Only runs in production with AWS_REGION
 
 #### 2.2 server/index.ts (MODIFY)
-**Location:** `C:\TherapyConnect\server\index.ts`
+**Location:** `C:\KareMatch\server\index.ts`
 
 **Changes:**
 1. Import `loadApplicationSecrets` from `./lib/secrets`
@@ -187,7 +187,7 @@ app:
 - Backward compatible with Render (fallback to env vars)
 
 #### 2.3 server/db.ts (MODIFY)
-**Location:** `C:\TherapyConnect\server\db.ts`
+**Location:** `C:\KareMatch\server\db.ts`
 
 **Changes:**
 Add RDS-specific connection configuration:
@@ -211,7 +211,7 @@ const client = postgres(process.env.DATABASE_URL, connectionConfig);
 - Development still works without SSL
 
 #### 2.4 server/routes.ts (MODIFY)
-**Location:** `C:\TherapyConnect\server\routes.ts`
+**Location:** `C:\KareMatch\server\routes.ts`
 
 **Changes:**
 Update session store SSL configuration:
@@ -271,14 +271,14 @@ terraform/
 **Variables:**
 - aws_region (default: us-east-1)
 - environment (default: production)
-- project_name (default: therapyconnect)
+- project_name (default: karematch)
 - domain_name (optional)
 - vpc_cidr (default: 10.0.0.0/16)
 - public_subnet_cidrs (default: [10.0.1.0/24, 10.0.2.0/24])
 - private_subnet_cidrs (default: [10.0.10.0/24, 10.0.11.0/24])
 - db_instance_class (default: db.t3.medium)
 - db_allocated_storage (default: 100 GB)
-- db_name (default: therapyconnect)
+- db_name (default: karematch)
 - db_username (default: postgres)
 - db_password (sensitive, required)
 - db_backup_retention_days (default: 30)
@@ -445,7 +445,7 @@ SESSION_SECRET=<random-64-bytes>
 **Resources:**
 
 1. **ECR Repository**
-   - Name: therapyconnect
+   - Name: karematch
    - Image tag mutability: MUTABLE
    - Scan on push: enabled (security vulnerability scanning)
    - Encryption: KMS
@@ -467,11 +467,11 @@ SESSION_SECRET=<random-64-bytes>
 **Resources:**
 
 1. **ECS Cluster**
-   - Name: therapyconnect-cluster
+   - Name: karematch-cluster
    - Container Insights: enabled
 
 2. **CloudWatch Log Group**
-   - Path: /ecs/therapyconnect
+   - Path: /ecs/karematch
    - Retention: 30 days
 
 3. **ECS Task Definition**
@@ -552,7 +552,7 @@ SESSION_SECRET=<random-64-bytes>
 **Resources:**
 
 1. **S3 Bucket**
-   - Name: therapyconnect-frontend-<account-id>
+   - Name: karematch-frontend-<account-id>
    - Public access: BLOCKED
    - Versioning: enabled
    - Encryption: AES256
@@ -617,8 +617,8 @@ SESSION_SECRET=<random-64-bytes>
 **Resources:**
 
 1. **Log Groups**
-   - /ecs/therapyconnect (ECS tasks)
-   - /aws/vpc/therapyconnect (VPC Flow Logs)
+   - /ecs/karematch (ECS tasks)
+   - /aws/vpc/karematch (VPC Flow Logs)
    - Retention: 30 days
 
 2. **Metric Alarms**
@@ -714,7 +714,7 @@ echo "===================================="
 # Run database migrations
 echo "Running database migrations..."
 cd ..
-DATABASE_URL="postgresql://postgres:$DB_PASSWORD@$RDS_ENDPOINT:5432/therapyconnect?sslmode=require" npm run db:push
+DATABASE_URL="postgresql://postgres:$DB_PASSWORD@$RDS_ENDPOINT:5432/karematch?sslmode=require" npm run db:push
 
 echo "Setup complete!"
 ```
@@ -739,16 +739,16 @@ cd ..
 IMAGE_TAG=$(git rev-parse --short HEAD)-$(date +%s)
 
 echo "Building Docker image..."
-docker build -t therapyconnect:$IMAGE_TAG .
-docker build -t therapyconnect:latest .
+docker build -t karematch:$IMAGE_TAG .
+docker build -t karematch:latest .
 
 echo "Logging into ECR..."
 aws ecr get-login-password --region $AWS_REGION | \
   docker login --username AWS --password-stdin $ECR_URL
 
 echo "Tagging images..."
-docker tag therapyconnect:$IMAGE_TAG $ECR_URL:$IMAGE_TAG
-docker tag therapyconnect:latest $ECR_URL:latest
+docker tag karematch:$IMAGE_TAG $ECR_URL:$IMAGE_TAG
+docker tag karematch:latest $ECR_URL:latest
 
 echo "Pushing to ECR..."
 docker push $ECR_URL:$IMAGE_TAG
@@ -895,7 +895,7 @@ echo ""
 echo "Next steps:"
 echo "1. Test application at CloudFront URL"
 echo "2. Check ALB health checks: aws elbv2 describe-target-health"
-echo "3. View ECS logs: aws logs tail /ecs/therapyconnect --follow"
+echo "3. View ECS logs: aws logs tail /ecs/karematch --follow"
 echo "4. If all looks good, update DNS to point to CloudFront"
 ```
 
@@ -914,7 +914,7 @@ chmod +x scripts/*.sh
 ### 5.1 .env.aws.example
 **Purpose:** Document AWS environment variables
 
-**Location:** `C:\TherapyConnect\.env.aws.example`
+**Location:** `C:\KareMatch\.env.aws.example`
 
 **Contents:**
 ```bash
@@ -932,7 +932,7 @@ PORT=5000
 # SESSION_SECRET=<loaded from Secrets Manager>
 
 # Local Development (use .env.local)
-# DATABASE_URL=postgresql://postgres:postgres@localhost:5432/therapyconnect
+# DATABASE_URL=postgresql://postgres:postgres@localhost:5432/karematch
 # ENCRYPTION_KEY=test-encryption-key-32-bytes-long-12345
 # SESSION_SECRET=test-session-secret-change-in-production
 ```
@@ -940,14 +940,14 @@ PORT=5000
 ### 5.2 package.json Updates
 **Purpose:** Add AWS deployment scripts
 
-**Location:** `C:\TherapyConnect\package.json`
+**Location:** `C:\KareMatch\package.json`
 
 **Add to scripts section:**
 ```json
 {
   "scripts": {
-    "docker:build": "docker build -t therapyconnect .",
-    "docker:run": "docker run -p 5000:5000 --env-file .env therapyconnect",
+    "docker:build": "docker build -t karematch .",
+    "docker:run": "docker run -p 5000:5000 --env-file .env karematch",
     "docker:compose:up": "docker-compose up",
     "docker:compose:down": "docker-compose down",
     "aws:setup": "bash scripts/setup-infrastructure.sh",
@@ -974,7 +974,7 @@ npm run aws:deploy                # Full deployment to AWS
 ### 6.1 AWS-DEPLOYMENT.md
 **Purpose:** Complete deployment guide
 
-**Location:** `C:\TherapyConnect\docs/AWS-DEPLOYMENT.md`
+**Location:** `C:\KareMatch\docs/AWS-DEPLOYMENT.md`
 
 **Sections:**
 1. **Prerequisites**
@@ -1048,7 +1048,7 @@ npm run aws:deploy                # Full deployment to AWS
 ### 6.2 AWS-ARCHITECTURE.md
 **Purpose:** System architecture documentation
 
-**Location:** `C:\TherapyConnect\docs/AWS-ARCHITECTURE.md`
+**Location:** `C:\KareMatch\docs/AWS-ARCHITECTURE.md`
 
 **Sections:**
 1. **Architecture Diagram** (ASCII or link to diagram)
@@ -1110,14 +1110,14 @@ npm run aws:deploy                # Full deployment to AWS
 ### 6.3 README.md Updates
 **Purpose:** Update main README with AWS information
 
-**Location:** `C:\TherapyConnect\README.md`
+**Location:** `C:\KareMatch\README.md`
 
 **Add AWS Deployment Section:**
 ```markdown
 ## AWS Deployment
 
 ### Architecture
-TherapyConnect is deployed on AWS using:
+KareMatch is deployed on AWS using:
 - ECS Fargate for containerized application
 - RDS PostgreSQL for database
 - CloudFront + S3 for frontend hosting

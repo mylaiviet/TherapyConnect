@@ -69,9 +69,11 @@ const LocationInput = React.memo(({
 
   // CRITICAL FIX: Debounce the parent update to prevent massive re-renders
   const debouncedUpdate = useMemo(() => {
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: NodeJS.Timeout | undefined;
     return (value: string) => {
-      clearTimeout(timeoutId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       timeoutId = setTimeout(() => {
         onChangeRef.current(value);  // Only update parent after 300ms of no typing
       }, 300);

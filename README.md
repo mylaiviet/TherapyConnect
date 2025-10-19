@@ -397,13 +397,77 @@ PORT=5000                         # Render provides this automatically
 3. **Test session persistence** after deployment
 4. **Clear browser cookies** when testing auth changes
 
+## AWS Deployment (Production-Ready)
+
+KareMatch includes a complete AWS infrastructure setup for production deployment.
+
+### Quick Start
+
+```bash
+# 1. Setup AWS infrastructure (VPC, RDS, ECS, etc.)
+npm run aws:setup
+
+# 2. Build and push Docker image
+npm run aws:build
+
+# 3. Deploy backend and frontend
+npm run aws:deploy
+```
+
+### Architecture
+
+- **ECS Fargate**: Containerized backend (auto-scaling)
+- **RDS PostgreSQL**: Managed database with automated backups
+- **Application Load Balancer**: HTTPS termination and routing
+- **S3 + CloudFront**: Global CDN for frontend
+- **Secrets Manager**: Secure credential storage
+- **CloudWatch**: Logging and monitoring
+
+**Features**:
+- ✅ HIPAA-compliant (encryption at rest and in transit)
+- ✅ Multi-AZ high availability
+- ✅ Auto-scaling based on load
+- ✅ Zero-downtime deployments
+- ✅ Automated backups and disaster recovery
+
+### Documentation
+
+- **[AWS Deployment Guide](docs/AWS-DEPLOYMENT.md)**: Complete deployment instructions
+- **[AWS Architecture](docs/AWS-ARCHITECTURE.md)**: Technical architecture details
+- **[Migration Plan](AWS-MIGRATION-PLAN-MAP.md)**: Implementation roadmap
+- **[Progress Tracker](AWS-MIGRATION-PROGRESS.md)**: Migration status
+
+### Available Scripts
+
+```bash
+npm run aws:setup           # Create AWS infrastructure with Terraform
+npm run aws:build           # Build and push Docker image to ECR
+npm run aws:deploy:backend  # Deploy backend to ECS
+npm run aws:deploy:frontend # Deploy frontend to S3/CloudFront
+npm run aws:deploy          # Full deployment (backend + frontend)
+
+npm run docker:build        # Build Docker image locally
+npm run docker:compose:up   # Test with Docker Compose
+npm run docker:compose:down # Stop Docker Compose
+```
+
+### Cost Estimate
+
+- **Development**: ~$50-100/month (single-AZ, t4g.micro)
+- **Production**: ~$200-300/month (multi-AZ, autoscaling)
+
+See [cost breakdown](docs/AWS-DEPLOYMENT.md#cost-optimization) for details.
+
+---
+
 ## Support
 
 For issues or questions:
 1. Check [SCHEDULING_DEPLOYMENT_GUIDE.md](SCHEDULING_DEPLOYMENT_GUIDE.md) for deployment issues
-2. Review API endpoint documentation above
-3. Check database schema in `shared/schema.ts`
-4. Create an issue on GitHub
+2. Check [AWS Deployment Guide](docs/AWS-DEPLOYMENT.md) for AWS-specific issues
+3. Review API endpoint documentation above
+4. Check database schema in `shared/schema.ts`
+5. Create an issue on GitHub
 
 ## License
 

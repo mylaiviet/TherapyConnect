@@ -13,7 +13,16 @@
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
     "db:push": "drizzle-kit push",
-    "db:seed": "tsx server/seed.ts"
+    "db:seed": "tsx server/seed.ts",
+    "aws:setup": "bash scripts/setup-infrastructure.sh",
+    "aws:build": "bash scripts/build-and-push.sh",
+    "aws:deploy:backend": "bash scripts/deploy-backend.sh",
+    "aws:deploy:frontend": "bash scripts/deploy-frontend.sh",
+    "aws:deploy": "bash scripts/deploy-all.sh",
+    "docker:build": "docker build -t karematch .",
+    "docker:compose:up": "docker-compose up -d",
+    "docker:compose:down": "docker-compose down",
+    "docker:compose:logs": "docker-compose logs -f"
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.913.0",

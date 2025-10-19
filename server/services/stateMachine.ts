@@ -327,7 +327,8 @@ async function processInsuranceResponse(conversationId: string, message: string)
 
   try {
     // Find matching therapists
-    const matches = await findMatchingTherapists(conversationId);
+    const result = await findMatchingTherapists(conversationId);
+    const matches = result.therapists;
 
     if (matches.length === 0) {
       return {
@@ -399,10 +400,16 @@ async function processMatchingResponse(conversationId: string, message: string):
     const { findMatchingTherapists } = await import('./therapistMatcher');
 
     try {
-      // Find matching therapists
-      const matches = await findMatchingTherapists(conversationId);
+      // Check if user wants to see more results
+      const offset = userMessage.toLowerCase().includes('more') || userMessage.toLowerCase().includes('next')
+        ? 5 // Show next 5
+        : 0; // Show first 5
 
-      if (matches.length === 0) {
+      // Find matching therapists with pagination
+      const result = await findMatchingTherapists(conversationId, offset, 5);
+      const { therapists: matches, hasMore, total } = result;
+
+      if (matches.length === 0 && offset === 0) {
         return {
           botResponse: {
             conversationId,
@@ -416,7 +423,9 @@ async function processMatchingResponse(conversationId: string, message: string):
       }
 
       // Format the matches into a readable message
-      let matchMessage = `Great news! I found ${matches.length} therapist${matches.length > 1 ? 's' : ''} who match your preferences:\n\n`;
+      let matchMessage = offset === 0
+        ? `Great news! I found ${total} therapist${total > 1 ? 's' : ''} near you. Here are the top ${matches.length} matches:\n\n`
+        : `Here are ${matches.length} more therapists that match your preferences:\n\n`;
 
       matches.forEach((therapist, index) => {
         const name = therapist.firstName && therapist.lastName
@@ -427,20 +436,24 @@ async function processMatchingResponse(conversationId: string, message: string):
         const score = therapist.matchScore;
         const reasons = therapist.matchReasons.slice(0, 2).join(', '); // Top 2 reasons
 
-        matchMessage += `${index + 1}. **${name}, ${credentials}**\n`;
+        matchMessage += `${offset + index + 1}. **${name}, ${credentials}**\n`;
         matchMessage += `   📍 ${location}\n`;
         matchMessage += `   ⭐ ${score}% match - ${reasons}\n`;
         matchMessage += `   👉 View profile: /therapists/${therapist.id}\n\n`;
       });
 
-      matchMessage += `You can click on each therapist's profile link to learn more and book a consultation. Would you like help with anything else?`;
+      if (hasMore) {
+        matchMessage += `\n💡 I have ${total - offset - matches.length} more therapists that match your criteria. Type "show more" to see them.\n\n`;
+      }
+
+      matchMessage += `You can click on each therapist's profile link to learn more and book an appointment. Would you like help with anything else?`;
 
       return {
         botResponse: {
           conversationId,
           sender: 'bot',
           content: matchMessage,
-          hasButtonOptions: false,
+          hasButtonOptions: hasMore,
         },
         crisisDetected: false,
         shouldEscalate: false,

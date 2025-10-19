@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Controller } from "react-hook-form";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
@@ -15,54 +15,74 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { MapPin, DollarSign, CheckCircle, Filter, X } from "lucide-react";
 import { Link } from "wouter";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { 
-  SPECIALTIES, 
-  SESSION_TYPES, 
-  MODALITIES, 
-  AGE_GROUPS, 
+import {
+  SPECIALTIES,
+  SESSION_TYPES,
+  MODALITIES,
+  AGE_GROUPS,
   INSURANCE_PROVIDERS,
   COMMUNITIES_SERVED,
-  type Therapist 
+  type Therapist
 } from "@shared/schema";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useTherapistFilters } from "@/hooks/useTherapistFilters";
 
 export default function TherapistSearch() {
-  const [filters, setFilters] = useState({
-    location: "",
-    radius: 25,
-    specialties: [] as string[],
-    sessionTypes: [] as string[],
-    modalities: [] as string[],
-    ageGroups: [] as string[],
-    insurance: [] as string[],
-    communities: [] as string[],
-    priceMin: 0,
-    priceMax: 300,
-    acceptingNewClients: false,
-  });
+  const { form, filters, debouncedFilters, setValue, toggleArrayFilter, clearFilters, filterCount } = useTherapistFilters();
+  const { control } = form;
 
   const [sortBy, setSortBy] = useState("relevance");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [openAccordions, setOpenAccordions] = useState<string[]>(["price"]);
+  const filterScrollRef = useRef<HTMLDivElement>(null);
+  const savedScrollPosition = useRef<number>(0);
+
+  // Preserve scroll position when filters change
+  useEffect(() => {
+    const scrollContainer = filterScrollRef.current;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      savedScrollPosition.current = scrollContainer.scrollTop;
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
+
+    if (savedScrollPosition.current > 0) {
+      scrollContainer.scrollTop = savedScrollPosition.current;
+    }
+
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll);
+    };
+  }, []); // FIXED: Added empty dependency array to prevent running on every render
 
   const { data: therapists, isLoading } = useQuery<Therapist[]>({
-    queryKey: ["/api/therapists", filters, sortBy],
+    queryKey: ["/api/therapists", debouncedFilters, sortBy], // Use debounced filters for API!
     queryFn: async () => {
       const params = new URLSearchParams();
-      
-      if (filters.location) params.set("location", filters.location);
-      if (filters.radius) params.set("radius", filters.radius.toString());
-      if (filters.specialties.length) params.set("specialties", filters.specialties.join(','));
-      if (filters.sessionTypes.length) params.set("sessionTypes", filters.sessionTypes.join(','));
-      if (filters.modalities.length) params.set("modalities", filters.modalities.join(','));
-      if (filters.ageGroups.length) params.set("ageGroups", filters.ageGroups.join(','));
-      if (filters.insurance.length) params.set("insurance", filters.insurance.join(','));
-      if (filters.communities.length) params.set("communities", filters.communities.join(','));
-      if (filters.priceMin > 0) params.set("priceMin", filters.priceMin.toString());
-      if (filters.priceMax < 300) params.set("priceMax", filters.priceMax.toString());
-      if (filters.acceptingNewClients) params.set("acceptingNewClients", "true");
+
+      // Use debouncedFilters for API params to prevent excessive requests
+      if (debouncedFilters.location) params.set("location", debouncedFilters.location);
+      if (debouncedFilters.radius) params.set("radius", debouncedFilters.radius.toString());
+      if (debouncedFilters.specialties.length) params.set("specialties", debouncedFilters.specialties.join(','));
+      if (debouncedFilters.sessionTypes.length) params.set("sessionTypes", debouncedFilters.sessionTypes.join(','));
+      if (debouncedFilters.modalities.length) params.set("modalities", debouncedFilters.modalities.join(','));
+      if (debouncedFilters.ageGroups.length) params.set("ageGroups", debouncedFilters.ageGroups.join(','));
+      if (debouncedFilters.insurance.length) params.set("insurance", debouncedFilters.insurance.join(','));
+      if (debouncedFilters.communities.length) params.set("communities", debouncedFilters.communities.join(','));
+      if (debouncedFilters.priceMin > 0) params.set("priceMin", debouncedFilters.priceMin.toString());
+      if (debouncedFilters.priceMax < 300) params.set("priceMax", debouncedFilters.priceMax.toString());
+      if (debouncedFilters.acceptingNewClients) params.set("acceptingNewClients", "true");
       if (sortBy) params.set("sortBy", sortBy);
 
       const url = `/api/therapists${params.toString() ? `?${params.toString()}` : ''}`;
@@ -70,76 +90,69 @@ export default function TherapistSearch() {
       if (!response.ok) throw new Error('Failed to fetch therapists');
       return response.json();
     },
+    staleTime: 30000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
-  const toggleArrayFilter = (key: keyof typeof filters, value: string) => {
-    const current = filters[key] as string[];
-    setFilters({
-      ...filters,
-      [key]: current.includes(value)
-        ? current.filter((v) => v !== value)
-        : [...current, value],
-    });
-  };
-
-  const clearFilters = () => {
-    setFilters({
-      location: "",
-      radius: 25,
-      specialties: [],
-      sessionTypes: [],
-      modalities: [],
-      ageGroups: [],
-      insurance: [],
-      communities: [],
-      priceMin: 0,
-      priceMax: 300,
-      acceptingNewClients: false,
-    });
-  };
-
   const FilterContent = () => (
-    <div className="space-y-6">
-      {/* Location Filter */}
-      <div>
-        <Label htmlFor="location" className="text-sm font-medium mb-2 block">
-          Location
-        </Label>
-        <Input
-          id="location"
-          type="text"
-          placeholder="City or ZIP code"
-          value={filters.location}
-          onChange={(e) => setFilters({ ...filters, location: e.target.value })}
-          data-testid="input-filter-location"
-        />
-        {filters.location && (
-          <div className="mt-4">
-            <Label className="text-sm font-medium mb-2 block">
-              Radius: {filters.radius} miles
-            </Label>
-            <Slider
-              value={[filters.radius]}
-              onValueChange={([value]) => setFilters({ ...filters, radius: value })}
-              min={5}
-              max={50}
-              step={5}
-              className="mt-2"
-              data-testid="slider-radius"
-            />
-          </div>
-        )}
-      </div>
+    <div className="space-y-4">
+      {/* Location Input with react-hook-form Controller */}
+      <div className="space-y-4">
+        <div>
+          <Label htmlFor="location" className="text-sm font-medium mb-2 block">
+            Location
+          </Label>
+          <Controller
+            name="location"
+            control={control}
+            render={({ field }) => (
+              <input
+                {...field}
+                type="text"
+                placeholder="City or ZIP code"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="input-filter-location"
+              />
+            )}
+          />
+          {filters.location && (
+            <div className="mt-4">
+              <Label className="text-sm font-medium mb-2 block">
+                Radius: {filters.radius} miles
+              </Label>
+              <Controller
+                name="radius"
+                control={control}
+                render={({ field }) => (
+                  <Slider
+                    value={[field.value]}
+                    onValueChange={([value]) => field.onChange(value)}
+                    min={5}
+                    max={50}
+                    step={5}
+                    className="mt-2"
+                    data-testid="slider-radius"
+                  />
+                )}
+              />
+            </div>
+          )}
+        </div>
 
-      <div className="border-t pt-4">
-        <div className="flex items-center space-x-2 mb-4">
-          <Checkbox
-            id="accepting"
-            checked={filters.acceptingNewClients}
-            onCheckedChange={(checked) =>
-              setFilters({ ...filters, acceptingNewClients: !!checked })
-            }
-            data-testid="checkbox-accepting-clients"
+        {/* Accepting New Clients Checkbox */}
+        <div className="flex items-center space-x-2">
+          <Controller
+            name="acceptingNewClients"
+            control={control}
+            render={({ field }) => (
+              <Checkbox
+                id="accepting"
+                checked={field.value}
+                onCheckedChange={field.onChange}
+                data-testid="checkbox-accepting-clients"
+              />
+            )}
           />
           <Label htmlFor="accepting" className="text-sm font-medium cursor-pointer">
             Accepting New Clients
@@ -147,156 +160,302 @@ export default function TherapistSearch() {
         </div>
       </div>
 
-      {/* Price Range */}
-      <div className="border-t pt-4">
-        <Label className="text-sm font-medium mb-2 block">
-          Session Fee: ${filters.priceMin} - ${filters.priceMax}
-        </Label>
-        <Slider
-          value={[filters.priceMin, filters.priceMax]}
-          onValueChange={([min, max]) =>
-            setFilters({ ...filters, priceMin: min, priceMax: max })
-          }
-          min={0}
-          max={300}
-          step={10}
-          className="mt-2"
-          data-testid="slider-price-range"
-        />
-      </div>
-
-      {/* Specializations */}
-      <div className="border-t pt-4">
-        <Label className="text-sm font-medium mb-3 block">Specializations</Label>
-        <div className="space-y-2 max-h-48 overflow-y-auto">
-          {SPECIALTIES.slice(0, 10).map((specialty) => (
-            <div key={specialty} className="flex items-center space-x-2">
-              <Checkbox
-                id={`specialty-${specialty}`}
-                checked={filters.specialties.includes(specialty)}
-                onCheckedChange={() => toggleArrayFilter("specialties", specialty)}
-                data-testid={`checkbox-specialty-${specialty.toLowerCase().replace(/\s+/g, '-')}`}
-              />
-              <Label
-                htmlFor={`specialty-${specialty}`}
-                className="text-sm cursor-pointer"
-              >
-                {specialty}
-              </Label>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Session Types */}
-      <div className="border-t pt-4">
-        <Label className="text-sm font-medium mb-3 block">Session Type</Label>
-        <div className="space-y-2">
-          {SESSION_TYPES.map((type) => (
-            <div key={type} className="flex items-center space-x-2">
-              <Checkbox
-                id={`session-${type}`}
-                checked={filters.sessionTypes.includes(type)}
-                onCheckedChange={() => toggleArrayFilter("sessionTypes", type)}
-                data-testid={`checkbox-session-${type}`}
-              />
-              <Label htmlFor={`session-${type}`} className="text-sm cursor-pointer capitalize">
-                {type}
-              </Label>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Modalities */}
-      <div className="border-t pt-4">
-        <Label className="text-sm font-medium mb-3 block">Modality</Label>
-        <div className="space-y-2">
-          {MODALITIES.map((modality) => (
-            <div key={modality} className="flex items-center space-x-2">
-              <Checkbox
-                id={`modality-${modality}`}
-                checked={filters.modalities.includes(modality)}
-                onCheckedChange={() => toggleArrayFilter("modalities", modality)}
-                data-testid={`checkbox-modality-${modality}`}
-              />
-              <Label htmlFor={`modality-${modality}`} className="text-sm cursor-pointer capitalize">
-                {modality}
-              </Label>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Age Groups */}
-      <div className="border-t pt-4">
-        <Label className="text-sm font-medium mb-3 block">Age Groups Served</Label>
-        <div className="space-y-2">
-          {AGE_GROUPS.map((age) => (
-            <div key={age} className="flex items-center space-x-2">
-              <Checkbox
-                id={`age-${age}`}
-                checked={filters.ageGroups.includes(age)}
-                onCheckedChange={() => toggleArrayFilter("ageGroups", age)}
-                data-testid={`checkbox-age-${age}`}
-              />
-              <Label htmlFor={`age-${age}`} className="text-sm cursor-pointer capitalize">
-                {age}
-              </Label>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Insurance */}
-      <div className="border-t pt-4">
-        <Label className="text-sm font-medium mb-3 block">Insurance Accepted</Label>
-        <div className="space-y-2 max-h-48 overflow-y-auto">
-          {INSURANCE_PROVIDERS.slice(0, 8).map((insurance) => (
-            <div key={insurance} className="flex items-center space-x-2">
-              <Checkbox
-                id={`insurance-${insurance}`}
-                checked={filters.insurance.includes(insurance)}
-                onCheckedChange={() => toggleArrayFilter("insurance", insurance)}
-                data-testid={`checkbox-insurance-${insurance.toLowerCase().replace(/\s+/g, '-')}`}
-              />
-              <Label htmlFor={`insurance-${insurance}`} className="text-sm cursor-pointer">
-                {insurance}
-              </Label>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Communities Served */}
-      <div className="border-t pt-4">
-        <Label className="text-sm font-medium mb-3 block">Community Focus</Label>
-        <div className="space-y-2">
-          {COMMUNITIES_SERVED.map((community) => (
-            <div key={community} className="flex items-center space-x-2">
-              <Checkbox
-                id={`community-${community}`}
-                checked={filters.communities.includes(community)}
-                onCheckedChange={() => toggleArrayFilter("communities", community)}
-                data-testid={`checkbox-community-${community.toLowerCase().replace(/\s+/g, '-')}`}
-              />
-              <Label htmlFor={`community-${community}`} className="text-sm cursor-pointer">
-                {community}
-              </Label>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <Button
-        variant="outline"
-        onClick={clearFilters}
+      {/* Collapsible Filter Sections */}
+      <Accordion
+        type="multiple"
         className="w-full"
-        data-testid="button-clear-filters"
+        value={openAccordions}
+        onValueChange={setOpenAccordions}
       >
-        <X className="mr-2 h-4 w-4" />
-        Clear All Filters
-      </Button>
+        {/* Price Range */}
+        <AccordionItem value="price">
+          <AccordionTrigger className="text-sm font-medium py-3">
+            <div className="flex items-center gap-2">
+              Session Fee
+              {(filters.priceMin > 0 || filters.priceMax < 300) && (
+                <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                  ${filters.priceMin}-${filters.priceMax}
+                </Badge>
+              )}
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="pt-2 pb-4">
+            <Label className="text-sm text-muted-foreground mb-3 block">
+              ${filters.priceMin} - ${filters.priceMax}
+            </Label>
+            <Controller
+              name="priceMin"
+              control={control}
+              render={({ field: minField }) => (
+                <Controller
+                  name="priceMax"
+                  control={control}
+                  render={({ field: maxField }) => (
+                    <Slider
+                      value={[minField.value, maxField.value]}
+                      onValueChange={([min, max]) => {
+                        minField.onChange(min);
+                        maxField.onChange(max);
+                      }}
+                      min={0}
+                      max={300}
+                      step={10}
+                      className="mt-2"
+                      data-testid="slider-price-range"
+                    />
+                  )}
+                />
+              )}
+            />
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Specializations */}
+        <AccordionItem value="specializations">
+          <AccordionTrigger className="text-sm font-medium py-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="shrink-0">Specializations</span>
+              {filters.specialties.length > 0 && (
+                <div className="flex flex-wrap gap-1 flex-1 min-w-0">
+                  {filters.specialties.slice(0, 2).map((specialty) => (
+                    <Badge key={specialty} variant="secondary" className="h-5 px-1.5 text-xs truncate max-w-[120px]">
+                      {specialty}
+                    </Badge>
+                  ))}
+                  {filters.specialties.length > 2 && (
+                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                      +{filters.specialties.length - 2}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="pt-2 pb-4">
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {SPECIALTIES.map((specialty) => (
+                <div key={specialty} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`specialty-${specialty}`}
+                    checked={filters.specialties.includes(specialty)}
+                    onCheckedChange={() => toggleArrayFilter("specialties", specialty)}
+                    data-testid={`checkbox-specialty-${specialty.toLowerCase().replace(/\s+/g, '-')}`}
+                  />
+                  <Label
+                    htmlFor={`specialty-${specialty}`}
+                    className="text-sm cursor-pointer"
+                  >
+                    {specialty}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Session Types */}
+        <AccordionItem value="session-types">
+          <AccordionTrigger className="text-sm font-medium py-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="shrink-0">Session Type</span>
+              {filters.sessionTypes.length > 0 && (
+                <div className="flex flex-wrap gap-1 flex-1 min-w-0">
+                  {filters.sessionTypes.map((type) => (
+                    <Badge key={type} variant="secondary" className="h-5 px-1.5 text-xs capitalize">
+                      {type}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="pt-2 pb-4">
+            <div className="space-y-2">
+              {SESSION_TYPES.map((type) => (
+                <div key={type} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`session-${type}`}
+                    checked={filters.sessionTypes.includes(type)}
+                    onCheckedChange={() => toggleArrayFilter("sessionTypes", type)}
+                    data-testid={`checkbox-session-${type}`}
+                  />
+                  <Label htmlFor={`session-${type}`} className="text-sm cursor-pointer capitalize">
+                    {type}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Modalities */}
+        <AccordionItem value="modalities">
+          <AccordionTrigger className="text-sm font-medium py-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="shrink-0">Therapy Modality</span>
+              {filters.modalities.length > 0 && (
+                <div className="flex flex-wrap gap-1 flex-1 min-w-0">
+                  {filters.modalities.slice(0, 2).map((modality) => (
+                    <Badge key={modality} variant="secondary" className="h-5 px-1.5 text-xs capitalize truncate max-w-[100px]">
+                      {modality}
+                    </Badge>
+                  ))}
+                  {filters.modalities.length > 2 && (
+                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                      +{filters.modalities.length - 2}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="pt-2 pb-4">
+            <div className="space-y-2">
+              {MODALITIES.map((modality) => (
+                <div key={modality} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`modality-${modality}`}
+                    checked={filters.modalities.includes(modality)}
+                    onCheckedChange={() => toggleArrayFilter("modalities", modality)}
+                    data-testid={`checkbox-modality-${modality}`}
+                  />
+                  <Label htmlFor={`modality-${modality}`} className="text-sm cursor-pointer capitalize">
+                    {modality}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Age Groups */}
+        <AccordionItem value="age-groups">
+          <AccordionTrigger className="text-sm font-medium py-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="shrink-0">Age Groups</span>
+              {filters.ageGroups.length > 0 && (
+                <div className="flex flex-wrap gap-1 flex-1 min-w-0">
+                  {filters.ageGroups.map((age) => (
+                    <Badge key={age} variant="secondary" className="h-5 px-1.5 text-xs capitalize">
+                      {age}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="pt-2 pb-4">
+            <div className="space-y-2">
+              {AGE_GROUPS.map((age) => (
+                <div key={age} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`age-${age}`}
+                    checked={filters.ageGroups.includes(age)}
+                    onCheckedChange={() => toggleArrayFilter("ageGroups", age)}
+                    data-testid={`checkbox-age-${age}`}
+                  />
+                  <Label htmlFor={`age-${age}`} className="text-sm cursor-pointer capitalize">
+                    {age}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Insurance */}
+        <AccordionItem value="insurance">
+          <AccordionTrigger className="text-sm font-medium py-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="shrink-0">Insurance</span>
+              {filters.insurance.length > 0 && (
+                <div className="flex flex-wrap gap-1 flex-1 min-w-0">
+                  {filters.insurance.slice(0, 2).map((insurance) => (
+                    <Badge key={insurance} variant="secondary" className="h-5 px-1.5 text-xs truncate max-w-[120px]">
+                      {insurance}
+                    </Badge>
+                  ))}
+                  {filters.insurance.length > 2 && (
+                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                      +{filters.insurance.length - 2}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="pt-2 pb-4">
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {INSURANCE_PROVIDERS.map((insurance) => (
+                <div key={insurance} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`insurance-${insurance}`}
+                    checked={filters.insurance.includes(insurance)}
+                    onCheckedChange={() => toggleArrayFilter("insurance", insurance)}
+                    data-testid={`checkbox-insurance-${insurance.toLowerCase().replace(/\s+/g, '-')}`}
+                  />
+                  <Label htmlFor={`insurance-${insurance}`} className="text-sm cursor-pointer">
+                    {insurance}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Communities Served */}
+        <AccordionItem value="communities">
+          <AccordionTrigger className="text-sm font-medium py-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="shrink-0">Community Focus</span>
+              {filters.communities.length > 0 && (
+                <div className="flex flex-wrap gap-1 flex-1 min-w-0">
+                  {filters.communities.slice(0, 2).map((community) => (
+                    <Badge key={community} variant="secondary" className="h-5 px-1.5 text-xs truncate max-w-[120px]">
+                      {community}
+                    </Badge>
+                  ))}
+                  {filters.communities.length > 2 && (
+                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                      +{filters.communities.length - 2}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="pt-2 pb-4">
+            <div className="space-y-2">
+              {COMMUNITIES_SERVED.map((community) => (
+                <div key={community} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`community-${community}`}
+                    checked={filters.communities.includes(community)}
+                    onCheckedChange={() => toggleArrayFilter("communities", community)}
+                    data-testid={`checkbox-community-${community.toLowerCase().replace(/\s+/g, '-')}`}
+                  />
+                  <Label htmlFor={`community-${community}`} className="text-sm cursor-pointer">
+                    {community}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+
+      {/* Clear Filters Button */}
+      {filterCount > 0 && (
+        <Button
+          variant="outline"
+          onClick={clearFilters}
+          className="w-full mt-4"
+          data-testid="button-clear-filters"
+        >
+          <X className="mr-2 h-4 w-4" />
+          Clear All Filters ({filterCount})
+        </Button>
+      )}
     </div>
   );
 
@@ -306,7 +465,7 @@ export default function TherapistSearch() {
         <div className="flex gap-8">
           {/* Desktop Sidebar */}
           <aside className="hidden lg:block w-80 flex-shrink-0">
-            <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto">
+            <div ref={filterScrollRef} className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto">
               <Card>
                 <CardContent className="p-6">
                   <h2 className="text-lg font-semibold mb-6">Filters</h2>
@@ -334,6 +493,11 @@ export default function TherapistSearch() {
                     <Button variant="outline" className="lg:hidden flex-1 sm:flex-none" data-testid="button-mobile-filters">
                       <Filter className="mr-2 h-4 w-4" />
                       Filters
+                      {filterCount > 0 && (
+                        <Badge variant="secondary" className="ml-2 h-5 px-1.5">
+                          {filterCount}
+                        </Badge>
+                      )}
                     </Button>
                   </SheetTrigger>
                   <SheetContent side="left" className="w-80 overflow-y-auto">

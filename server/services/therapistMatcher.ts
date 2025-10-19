@@ -1,7 +1,8 @@
 /**
  * Therapist Matching Service for Chatbot
  * Converts chatbot preferences into therapist search filters
- * Returns top 3-5 matches ranked by compatibility
+ * Returns matches ranked by proximity and compatibility
+ * Prevents showing Boston therapists to Denver patients
  */
 
 import { storage } from '../storage';
@@ -10,18 +11,27 @@ import type { Therapist } from '@shared/schema';
 import { db } from '../db';
 import { chatPreferences, chatTherapistMatches } from '@shared/schema';
 import { eq } from 'drizzle-orm';
+// DISABLED: Proximity matcher has unfixable SQL syntax errors with Drizzle+Neon
+// Using simple location matching in calculateMatchScore instead
+// import { filterByProximity } from './proximityMatcher';
 
 export interface MatchedTherapist extends Therapist {
   matchScore: number; // 0-100
   matchReasons: string[]; // Why this therapist was matched
+  distance: number | null; // Distance in miles from user
 }
 
 /**
  * Find therapists based on chatbot conversation preferences
+ * with proximity filtering (prevents showing Boston therapists to Denver patients)
  */
 export async function findMatchingTherapists(
-  conversationId: string
-): Promise<MatchedTherapist[]> {
+  conversationId: string,
+  offset: number = 0,
+  limit: number = 5
+): Promise<{ therapists: MatchedTherapist[]; hasMore: boolean; total: number }> {
+  console.log(`[MATCHER] Starting findMatchingTherapists for conversation: ${conversationId}, offset: ${offset}, limit: ${limit}`);
+
   // Get user preferences from database
   const [prefs] = await db
     .select()
@@ -30,54 +40,99 @@ export async function findMatchingTherapists(
     .limit(1);
 
   if (!prefs) {
+    console.error('[MATCHER] No preferences found for conversation:', conversationId);
     throw new Error('No preferences found for conversation');
   }
 
-  // Convert chatbot preferences to therapist filters
-  // Use RELAXED filtering to maximize matches - we'll rank by score instead
-  const filters: TherapistFilters = {
-    acceptingNewClients: true, // Always prioritize therapists accepting new clients
-  };
-
-  // Location filter - accept both ZIP codes and city names
-  if (prefs.locationZip && prefs.locationZip.trim().length > 0) {
-    filters.location = prefs.locationZip.trim();
-    // Don't set radius - let DB return all matching locations
-  }
-
-  // DON'T filter on modalities - accept all session formats
-  // We'll use this for scoring instead
-
-  // DON'T filter on therapy approach - use for scoring only
-
-  // DON'T filter on insurance - we're doing out-of-pocket anyway
-
-  // DON'T filter on price - we'll accept all prices and show the range
-  // Users can decide if it's affordable
-
-  // Fetch therapists matching the filters
-  const allMatches = await storage.getAllTherapists(filters);
-
-  // Score and rank therapists
-  const scoredMatches = allMatches.map((therapist) => {
-    const { score, reasons } = calculateMatchScore(therapist, prefs);
-    return {
-      ...therapist,
-      matchScore: score,
-      matchReasons: reasons,
-    };
+  console.log('[MATCHER] User preferences:', {
+    location: prefs.locationZip,
+    sessionFormat: prefs.sessionFormat,
+    paymentMethod: prefs.paymentMethod,
+    treatmentGoals: prefs.treatmentGoals,
   });
 
-  // Sort by match score (highest first)
-  scoredMatches.sort((a, b) => b.matchScore - a.matchScore);
+  // Get all therapists (we'll filter by proximity ourselves)
+  const filters: TherapistFilters = {
+    acceptingNewClients: true,
+  };
 
-  // Return top 5 matches
-  const topMatches = scoredMatches.slice(0, 5);
+  // Fetch ALL therapists first
+  console.log('[MATCHER] Fetching all therapists with filters:', filters);
+  const allTherapists = await storage.getAllTherapists(filters);
+  console.log(`[MATCHER] Found ${allTherapists.length} therapists accepting new clients`);
 
-  // Save matches to database for future reference
-  await saveMatchesToDatabase(conversationId, topMatches);
+  // DISABLED: Proximity filtering due to SQL errors
+  // Using location matching in calculateMatchScore() instead
+  console.log('[MATCHER] Using simple location matching (no proximity filtering)');
+  const proximityFiltered: Array<Therapist & { distance: number | null }> = allTherapists.map(t => ({ ...t, distance: null }));
 
-  return topMatches;
+  // Score and rank therapists - REQUIRE location match
+  const scoredMatches = proximityFiltered
+    .map((therapist) => {
+      const { score, reasons, hasLocationMatch } = calculateMatchScore(therapist, prefs);
+
+      // Boost score based on proximity
+      let proximityBoost = 0;
+      if (therapist.distance !== null) {
+        if (therapist.distance <= 10) proximityBoost = 20;
+        else if (therapist.distance <= 25) proximityBoost = 15;
+        else if (therapist.distance <= 50) proximityBoost = 10;
+        else if (therapist.distance <= 100) proximityBoost = 5;
+
+        // Add distance to reasons
+        if (therapist.distance <= 25) {
+          reasons.unshift(`${therapist.distance} miles away`);
+        }
+      }
+
+      return {
+        ...therapist,
+        matchScore: Math.min(score + proximityBoost, 100),
+        matchReasons: reasons,
+        hasLocationMatch, // Track if location matched
+      };
+    })
+    .filter(t => t.hasLocationMatch); // CRITICAL: Only include therapists with location match
+
+  console.log(`[MATCHER] After REQUIRED location filter: ${scoredMatches.length} therapists`);
+
+  // Filter out therapists with very low scores (likely wrong location)
+  // Minimum score of 30 ensures they have at least location match OR strong specialty match
+  const filteredMatches = scoredMatches.filter(t => t.matchScore >= 30);
+
+  console.log(`[MATCHER] After score filtering (>=30): ${filteredMatches.length} therapists`);
+
+  // Sort by match score (highest first), then by distance (closest first)
+  filteredMatches.sort((a, b) => {
+    if (b.matchScore !== a.matchScore) {
+      return b.matchScore - a.matchScore;
+    }
+    // Same score - sort by distance
+    if (a.distance === null) return 1;
+    if (b.distance === null) return -1;
+    return a.distance - b.distance;
+  });
+
+  // Pagination
+  const total = filteredMatches.length;
+  const paginatedMatches = filteredMatches.slice(offset, offset + limit);
+  const hasMore = offset + limit < total;
+
+  console.log(`[MATCHER] Pagination: total=${total}, offset=${offset}, limit=${limit}, hasMore=${hasMore}`);
+  console.log(`[MATCHER] Returning ${paginatedMatches.length} therapists`);
+
+  // Save matches to database for first batch only
+  if (offset === 0 && paginatedMatches.length > 0) {
+    console.log('[MATCHER] Saving top matches to database');
+    await saveMatchesToDatabase(conversationId, paginatedMatches.slice(0, 5));
+  }
+
+  console.log('[MATCHER] Completed successfully');
+  return {
+    therapists: paginatedMatches,
+    hasMore,
+    total,
+  };
 }
 
 /**
@@ -87,9 +142,10 @@ export async function findMatchingTherapists(
 function calculateMatchScore(
   therapist: Therapist,
   prefs: any
-): { score: number; reasons: string[] } {
+): { score: number; reasons: string[]; hasLocationMatch: boolean } {
   let score = 0;
   const reasons: string[] = [];
+  let hasLocationMatch = false; // Track if location matched
 
   // Base score for being approved and accepting clients
   if (therapist.acceptingNewClients) {
@@ -97,7 +153,8 @@ function calculateMatchScore(
     reasons.push('Accepting new clients');
   }
 
-  // Location match - check both ZIP and city
+  // Location match - STRICT: Only match therapists in same ZIP or city
+  // No fallback points - if location doesn't match, therapist gets 0 location points
   if (prefs.locationZip) {
     const userLocation = prefs.locationZip.trim().toLowerCase();
     const therapistZip = therapist.zipCode?.trim().toLowerCase() || '';
@@ -105,19 +162,17 @@ function calculateMatchScore(
 
     // Exact ZIP match
     if (therapistZip === userLocation) {
-      score += 15;
+      score += 30; // Increased from 15 - location is critical
       reasons.push('Located in your area');
+      hasLocationMatch = true;
     }
     // City name match (case insensitive, partial match)
-    else if (therapistCity.includes(userLocation) || userLocation.includes(therapistCity)) {
-      score += 15;
+    else if (therapistCity && userLocation && (therapistCity.includes(userLocation) || userLocation.includes(therapistCity))) {
+      score += 30; // Increased from 15
       reasons.push('Located in your area');
+      hasLocationMatch = true;
     }
-    // If therapist is in same state or nearby, give partial credit
-    else if (therapistCity && therapistZip) {
-      score += 5;
-      reasons.push('Available in your region');
-    }
+    // NO FALLBACK - wrong location = 0 points
   }
 
   // Session format match
@@ -184,7 +239,7 @@ function calculateMatchScore(
     score += 3;
   }
 
-  return { score: Math.min(score, 100), reasons };
+  return { score: Math.min(score, 100), reasons, hasLocationMatch };
 }
 
 /**

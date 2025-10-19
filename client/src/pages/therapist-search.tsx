@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Controller } from "react-hook-form";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
@@ -35,6 +36,195 @@ import {
 } from "@shared/schema";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTherapistFilters } from "@/hooks/useTherapistFilters";
+
+// Isolated input component with local state to prevent parent re-renders
+const LocationInput = React.memo(({
+  value: initialValue,
+  onChange,
+  placeholder,
+  className,
+  maxLength,
+  type = "text",
+  testId,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+  maxLength?: number;
+  type?: string;
+  testId?: string;
+}) => {
+  const [localValue, setLocalValue] = useState(initialValue);
+  const onChangeRef = useRef(onChange);
+
+  // Update ref when onChange changes
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  // Sync with parent when prop changes (e.g., Clear Filters clicked)
+  useEffect(() => {
+    setLocalValue(initialValue);
+  }, [initialValue]);
+
+  // CRITICAL FIX: Debounce the parent update to prevent massive re-renders
+  const debouncedUpdate = useMemo(() => {
+    let timeoutId: NodeJS.Timeout | undefined;
+    return (value: string) => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      timeoutId = setTimeout(() => {
+        onChangeRef.current(value);  // Only update parent after 300ms of no typing
+      }, 300);
+    };
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setLocalValue(newValue);      // ✅ Instant local update (zero lag)
+    debouncedUpdate(newValue);    // ✅ Parent updates after 300ms (prevents re-renders)
+  };
+
+  return (
+    <Input
+      type={type}
+      value={localValue}
+      onChange={handleChange}
+      placeholder={placeholder}
+      className={className}
+      maxLength={maxLength}
+      data-testid={testId}
+    />
+  );
+});
+
+LocationInput.displayName = "LocationInput";
+
+// Memoized therapist card to prevent unnecessary re-renders
+const TherapistCard = React.memo(({ therapist }: { therapist: Therapist }) => {
+  return (
+    <Card className="hover-elevate active-elevate-2" data-testid={`card-therapist-${therapist.id}`}>
+      <CardContent className="p-6">
+        <div className="flex gap-4 mb-4">
+          <Avatar className="h-24 w-24 rounded-lg">
+            <AvatarImage src={therapist.photoUrl || undefined} alt={`${therapist.firstName} ${therapist.lastName}`} />
+            <AvatarFallback className="rounded-lg text-lg">
+              {therapist.firstName[0]}{therapist.lastName[0]}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1">
+            <h3 className="font-semibold text-lg mb-1" data-testid={`text-name-${therapist.id}`}>
+              {therapist.firstName} {therapist.lastName}
+            </h3>
+            {therapist.credentials && (
+              <p className="text-sm text-muted-foreground mb-2">
+                {therapist.credentials}
+              </p>
+            )}
+            <div className="flex items-center text-sm text-muted-foreground">
+              <MapPin className="h-3 w-3 mr-1" />
+              {therapist.city}, {therapist.state}
+            </div>
+          </div>
+        </div>
+
+        {therapist.topSpecialties && therapist.topSpecialties.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {therapist.topSpecialties.slice(0, 3).map((specialty) => (
+              <Badge key={specialty} variant="secondary" className="text-xs">
+                {specialty}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between mb-4 text-sm">
+          {therapist.individualSessionFee && (
+            <div className="flex items-center text-muted-foreground">
+              <DollarSign className="h-4 w-4" />
+              <span className="font-medium">{therapist.individualSessionFee}</span>
+              <span className="ml-1">/ session</span>
+            </div>
+          )}
+          {therapist.acceptingNewClients && (
+            <Badge variant="default" className="bg-chart-3 hover:bg-chart-3/90">
+              <CheckCircle className="h-3 w-3 mr-1" />
+              Accepting
+            </Badge>
+          )}
+        </div>
+
+        <Button asChild className="w-full" data-testid={`button-view-profile-${therapist.id}`}>
+          <Link href={`/therapists/${therapist.id}`}>View Profile</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+});
+
+TherapistCard.displayName = "TherapistCard";
+
+// Memoized results list to prevent re-renders during typing
+const TherapistResultsList = React.memo(({
+  therapists,
+  isLoading,
+  onClearFilters,
+}: {
+  therapists?: Therapist[];
+  isLoading: boolean;
+  onClearFilters: () => void;
+}) => {
+  if (isLoading) {
+    return (
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <Card key={i}>
+            <CardContent className="p-6">
+              <div className="flex gap-4 mb-4">
+                <Skeleton className="h-24 w-24 rounded-lg" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-6 w-32" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+              </div>
+              <Skeleton className="h-16 w-full mb-4" />
+              <Skeleton className="h-10 w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  if (!therapists || therapists.length === 0) {
+    return (
+      <Card className="p-12 text-center">
+        <p className="text-lg text-muted-foreground mb-4">
+          No therapists found matching your criteria
+        </p>
+        <p className="text-sm text-muted-foreground mb-6">
+          Try adjusting your filters or broadening your search
+        </p>
+        <Button onClick={onClearFilters} data-testid="button-clear-filters-empty">
+          Clear Filters
+        </Button>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+      {therapists.map((therapist) => (
+        <TherapistCard key={therapist.id} therapist={therapist} />
+      ))}
+    </div>
+  );
+});
+
+TherapistResultsList.displayName = "TherapistResultsList";
 
 export default function TherapistSearch() {
   const { form, filters, debouncedFilters, setValue, toggleArrayFilter, clearFilters, filterCount } = useTherapistFilters();
@@ -97,24 +287,17 @@ export default function TherapistSearch() {
 
   const FilterContent = () => (
     <div className="space-y-4">
-      {/* Location Input with react-hook-form Controller */}
+      {/* Location Input with debouncing to prevent input lag */}
       <div className="space-y-4">
         <div>
           <Label htmlFor="location" className="text-sm font-medium mb-2 block">
             Location
           </Label>
-          <Controller
-            name="location"
-            control={control}
-            render={({ field }) => (
-              <input
-                {...field}
-                type="text"
-                placeholder="City or ZIP code"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                data-testid="input-filter-location"
-              />
-            )}
+          <LocationInput
+            value={filters.location}
+            onChange={(value) => setValue('location', value)}
+            placeholder="City or ZIP code"
+            testId="input-filter-location"
           />
           {filters.location && (
             <div className="mt-4">
@@ -526,100 +709,12 @@ export default function TherapistSearch() {
               </div>
             </div>
 
-            {/* Results Grid */}
-            {isLoading ? (
-              <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <Card key={i}>
-                    <CardContent className="p-6">
-                      <div className="flex gap-4 mb-4">
-                        <Skeleton className="h-24 w-24 rounded-lg" />
-                        <div className="flex-1 space-y-2">
-                          <Skeleton className="h-6 w-32" />
-                          <Skeleton className="h-4 w-24" />
-                          <Skeleton className="h-4 w-20" />
-                        </div>
-                      </div>
-                      <Skeleton className="h-16 w-full mb-4" />
-                      <Skeleton className="h-10 w-full" />
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : therapists && therapists.length > 0 ? (
-              <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {therapists.map((therapist) => (
-                  <Card key={therapist.id} className="hover-elevate active-elevate-2" data-testid={`card-therapist-${therapist.id}`}>
-                    <CardContent className="p-6">
-                      <div className="flex gap-4 mb-4">
-                        <Avatar className="h-24 w-24 rounded-lg">
-                          <AvatarImage src={therapist.photoUrl || undefined} alt={`${therapist.firstName} ${therapist.lastName}`} />
-                          <AvatarFallback className="rounded-lg text-lg">
-                            {therapist.firstName[0]}{therapist.lastName[0]}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-lg mb-1" data-testid={`text-name-${therapist.id}`}>
-                            {therapist.firstName} {therapist.lastName}
-                          </h3>
-                          {therapist.credentials && (
-                            <p className="text-sm text-muted-foreground mb-2">
-                              {therapist.credentials}
-                            </p>
-                          )}
-                          <div className="flex items-center text-sm text-muted-foreground">
-                            <MapPin className="h-3 w-3 mr-1" />
-                            {therapist.city}, {therapist.state}
-                          </div>
-                        </div>
-                      </div>
-
-                      {therapist.topSpecialties && therapist.topSpecialties.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          {therapist.topSpecialties.slice(0, 3).map((specialty) => (
-                            <Badge key={specialty} variant="secondary" className="text-xs">
-                              {specialty}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between mb-4 text-sm">
-                        {therapist.individualSessionFee && (
-                          <div className="flex items-center text-muted-foreground">
-                            <DollarSign className="h-4 w-4" />
-                            <span className="font-medium">{therapist.individualSessionFee}</span>
-                            <span className="ml-1">/ session</span>
-                          </div>
-                        )}
-                        {therapist.acceptingNewClients && (
-                          <Badge variant="default" className="bg-chart-3 hover:bg-chart-3/90">
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Accepting
-                          </Badge>
-                        )}
-                      </div>
-
-                      <Button asChild className="w-full" data-testid={`button-view-profile-${therapist.id}`}>
-                        <Link href={`/therapists/${therapist.id}`}>View Profile</Link>
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <Card className="p-12 text-center">
-                <p className="text-lg text-muted-foreground mb-4">
-                  No therapists found matching your criteria
-                </p>
-                <p className="text-sm text-muted-foreground mb-6">
-                  Try adjusting your filters or broadening your search
-                </p>
-                <Button onClick={clearFilters} data-testid="button-clear-filters-empty">
-                  Clear Filters
-                </Button>
-              </Card>
-            )}
+            {/* Results Grid - Using memoized component to prevent re-renders */}
+            <TherapistResultsList
+              therapists={therapists}
+              isLoading={isLoading}
+              onClearFilters={clearFilters}
+            />
           </div>
         </div>
       </div>

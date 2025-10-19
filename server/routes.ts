@@ -20,11 +20,19 @@ declare module 'express-session' {
 export function registerRoutes(app: Express): void {
   // Session store configuration
   const PgSession = connectPgSimple(session);
+
+  // Check if running in AWS (requires SSL for RDS HIPAA compliance)
+  const isAWSEnvironment = !!(
+    process.env.AWS_EXECUTION_ENV ||
+    process.env.ECS_CONTAINER_METADATA_URI ||
+    process.env.AWS_SECRET_NAME
+  );
+
   const sessionStore = process.env.NODE_ENV === "production"
     ? new PgSession({
         conObject: {
           connectionString: process.env.DATABASE_URL,
-          ssl: { rejectUnauthorized: false }
+          ssl: isAWSEnvironment ? { rejectUnauthorized: true } : false
         },
         tableName: 'session',
         createTableIfMissing: true,

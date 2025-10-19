@@ -3,6 +3,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { loadSecrets } from "./lib/secrets";
 
 const app = express();
 
@@ -45,6 +46,27 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Load secrets from AWS Secrets Manager (production) or .env (local)
+  // This must happen before any database connections or route registration
+  try {
+    await loadSecrets();
+    log("Application secrets loaded successfully");
+  } catch (error) {
+    console.error("FATAL: Failed to load application secrets:", error);
+    process.exit(1);
+  }
+
+  // Health check endpoint for AWS ECS/ALB and Docker
+  // Must respond quickly without database dependencies
+  app.get("/health", (_req: Request, res: Response) => {
+    res.status(200).json({
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || "development",
+    });
+  });
+
   // Register all API routes
   registerRoutes(app);
 

@@ -3,8 +3,12 @@ import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { insertTherapistSchema, insertUserSchema } from "@shared/schema";
+import { insertTherapistSchema, insertUserSchema, chatMessages, chatConversations, chatEscalations } from "@shared/schema";
 import type { TherapistFilters } from "./storage";
+import { initializeConversation, processUserResponse, getConversationContext } from "./services/stateMachine";
+import { getSavedMatches } from "./services/therapistMatcher";
+import { db } from "./db";
+import { eq, desc } from "drizzle-orm";
 
 declare module 'express-session' {
   interface SessionData {
@@ -629,6 +633,197 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Error fetching appointment:", error);
       res.status(500).json({ error: "Failed to fetch appointment" });
+    }
+  });
+
+  // ============================================
+  // CHATBOT API ROUTES
+  // ============================================
+
+  /**
+   * Initialize a new chat conversation
+   * POST /api/chat/start
+   */
+  app.post("/api/chat/start", async (req: Request, res: Response) => {
+    try {
+      const sessionId = req.sessionID;
+      const userId = req.session.userId; // Optional - user may not be logged in
+
+      const conversationId = await initializeConversation(sessionId, userId);
+
+      // Get initial messages
+      const messages = await db
+        .select()
+        .from(chatMessages)
+        .where(eq(chatMessages.conversationId, conversationId))
+        .orderBy(chatMessages.createdAt);
+
+      res.json({
+        conversationId,
+        messages,
+        stage: 'welcome',
+      });
+    } catch (error) {
+      console.error("Error starting conversation:", error);
+      res.status(500).json({ error: "Failed to start conversation" });
+    }
+  });
+
+  /**
+   * Send a message in the conversation
+   * POST /api/chat/message
+   */
+  app.post("/api/chat/message", async (req: Request, res: Response) => {
+    try {
+      const { conversationId, content } = req.body;
+
+      if (!conversationId || !content) {
+        return res.status(400).json({ error: "conversationId and content are required" });
+      }
+
+      // Get current conversation
+      const [conversation] = await db
+        .select()
+        .from(chatConversations)
+        .where(eq(chatConversations.id, conversationId))
+        .limit(1);
+
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+      // Save user message
+      await db.insert(chatMessages).values({
+        conversationId,
+        sender: 'user',
+        content,
+      });
+
+      // Process message and get bot response
+      const result = await processUserResponse(conversationId, content, conversation.stage);
+
+      // Save bot response
+      const [botMessage] = await db.insert(chatMessages).values(result.botResponse).returning();
+
+      res.json({
+        userMessage: { conversationId, sender: 'user', content },
+        botMessage,
+        nextStage: result.nextStage || conversation.stage,
+        crisisDetected: result.crisisDetected,
+        shouldEscalate: result.shouldEscalate,
+      });
+    } catch (error) {
+      console.error("Error processing message:", error);
+      res.status(500).json({ error: "Failed to process message" });
+    }
+  });
+
+  /**
+   * Get conversation history
+   * GET /api/chat/conversation/:id
+   */
+  app.get("/api/chat/conversation/:id", async (req: Request, res: Response) => {
+    try {
+      const conversationId = req.params.id;
+
+      const [conversation] = await db
+        .select()
+        .from(chatConversations)
+        .where(eq(chatConversations.id, conversationId))
+        .limit(1);
+
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+      const messages = await db
+        .select()
+        .from(chatMessages)
+        .where(eq(chatMessages.conversationId, conversationId))
+        .orderBy(chatMessages.createdAt);
+
+      const context = await getConversationContext(conversationId);
+
+      // Get therapist matches if conversation reached matching stage
+      let therapistMatches = [];
+      if (conversation.stage === 'matching') {
+        try {
+          therapistMatches = await getSavedMatches(conversationId);
+        } catch (error) {
+          console.error("Error fetching therapist matches:", error);
+          // Don't fail the whole request if matches fail
+        }
+      }
+
+      res.json({
+        conversation,
+        messages,
+        preferences: context.preferences,
+        therapistMatches,
+      });
+    } catch (error) {
+      console.error("Error fetching conversation:", error);
+      res.status(500).json({ error: "Failed to fetch conversation" });
+    }
+  });
+
+  /**
+   * Request human escalation
+   * POST /api/chat/escalate
+   */
+  app.post("/api/chat/escalate", async (req: Request, res: Response) => {
+    try {
+      const { conversationId, reason } = req.body;
+
+      if (!conversationId) {
+        return res.status(400).json({ error: "conversationId is required" });
+      }
+
+      // Log escalation
+      await db.insert(chatEscalations).values({
+        conversationId,
+        escalationType: 'human_request',
+        triggerMessage: reason || 'User requested human assistance',
+        actionTaken: 'notified_staff',
+        staffNotified: true,
+        staffNotifiedAt: new Date(),
+      });
+
+      // Update conversation
+      await db
+        .update(chatConversations)
+        .set({ escalationRequested: true, updatedAt: new Date() })
+        .where(eq(chatConversations.id, conversationId));
+
+      // TODO: Send email/Slack notification to staff
+      console.log(`[ESCALATION] Conversation ${conversationId} escalated to human staff`);
+
+      res.json({
+        success: true,
+        message: 'A team member has been notified and will reach out shortly.',
+      });
+    } catch (error) {
+      console.error("Error escalating conversation:", error);
+      res.status(500).json({ error: "Failed to escalate conversation" });
+    }
+  });
+
+  /**
+   * Get escalations (admin only)
+   * GET /api/chat/escalations
+   */
+  app.get("/api/chat/escalations", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const escalations = await db
+        .select()
+        .from(chatEscalations)
+        .orderBy(desc(chatEscalations.createdAt))
+        .limit(100);
+
+      res.json(escalations);
+    } catch (error) {
+      console.error("Error fetching escalations:", error);
+      res.status(500).json({ error: "Failed to fetch escalations" });
     }
   });
 }

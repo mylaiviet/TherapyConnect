@@ -5,8 +5,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
+import ChatWidget from "@/components/chatbot/ChatWidget";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
+import Match from "@/pages/match";
 import TherapistSearch from "@/pages/therapist-search";
 import TherapistProfile from "@/pages/therapist-profile";
 import Login from "@/pages/login";
@@ -20,6 +22,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/match" component={Match} />
       <Route path="/therapists" component={TherapistSearch} />
       <Route path="/therapists/:id" component={TherapistProfile} />
       <Route path="/login" component={Login} />
@@ -44,6 +47,7 @@ function App() {
           </main>
           <Footer />
         </div>
+        <ChatWidget />
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

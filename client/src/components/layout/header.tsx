@@ -31,7 +31,7 @@ export function Header() {
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-6">
+          <nav className="hidden md:flex items-center space-x-6" data-sidebar>
             <Link href="/therapists">
               <span
                 className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${

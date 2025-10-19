@@ -98,6 +98,14 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Session table (created by connect-pg-simple for express-session)
+// This table is managed by express-session middleware, not by our app
+export const session = pgTable("session", {
+  sid: varchar("sid").primaryKey(),
+  sess: text("sess").notNull(), // JSON session data
+  expire: timestamp("expire").notNull(),
+});
+
 // Zod Schemas
 export const insertTherapistSchema = createInsertSchema(therapists).omit({
   id: true,
@@ -173,6 +181,11 @@ export const LICENSE_TYPES = [
 // Appointment Scheduling Enums
 export const appointmentStatusEnum = pgEnum('appointment_status', ['pending', 'confirmed', 'cancelled', 'completed', 'no_show']);
 export const bookingModeEnum = pgEnum('booking_mode', ['instant', 'request']);
+
+// Chatbot Enums
+export const conversationStageEnum = pgEnum('conversation_stage', ['welcome', 'demographics', 'preferences', 'goals', 'insurance', 'matching']);
+export const messageSenderEnum = pgEnum('message_sender', ['bot', 'user', 'system']);
+export const escalationTypeEnum = pgEnum('escalation_type', ['crisis', 'abuse_report', 'human_request', 'general']);
 
 // Therapist Availability Table
 export const therapistAvailability = pgTable("therapist_availability", {
@@ -273,3 +286,184 @@ export type TimeSlot = {
   available: boolean;
   duration: number; // minutes
 };
+
+// ============================================
+// CHATBOT TABLES (HIPAA-Compliant)
+// ============================================
+
+// Chat Conversations Table
+export const chatConversations = pgTable("chat_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: text("session_id"), // Anonymous session ID (for logged-out users)
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }), // Linked user if logged in
+  stage: conversationStageEnum("stage").default('welcome').notNull(),
+  isActive: boolean("is_active").default(true),
+  crisisDetected: boolean("crisis_detected").default(false),
+  escalationRequested: boolean("escalation_requested").default(false),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(), // 30-day retention from creation
+});
+
+// Chat Messages Table
+export const chatMessages = pgTable("chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => chatConversations.id, { onDelete: "cascade" }),
+  sender: messageSenderEnum("sender").notNull(),
+  content: text("content").notNull(), // Actual message content (PHI redacted with tokens)
+  hasButtonOptions: boolean("has_button_options").default(false),
+  selectedOption: text("selected_option"), // User's selected option value
+  isDisclaimer: boolean("is_disclaimer").default(false),
+  isCrisisAlert: boolean("is_crisis_alert").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// PHI Token Vault (Encrypted Storage)
+export const chatTokens = pgTable("chat_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => chatConversations.id, { onDelete: "cascade" }),
+  tokenKey: text("token_key").notNull().unique(), // e.g., "TOKEN_NAME_001"
+  encryptedValue: text("encrypted_value").notNull(), // AES-256 encrypted PHI
+  fieldType: text("field_type").notNull(), // "name", "location", "phone", "email"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// User Preferences Collected (Non-PHI)
+export const chatPreferences = pgTable("chat_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().unique().references(() => chatConversations.id, { onDelete: "cascade" }),
+
+  // Demographics (tokenized or range-based)
+  ageRange: text("age_range"), // "25-34"
+  pronouns: text("pronouns"),
+  language: text("language"), // "english", "spanish", etc.
+  locationZip: text("location_zip"), // ZIP code only, not full address
+
+  // Preferences
+  sessionFormat: text("session_format"), // "in-person", "virtual", "either"
+  availability: text("availability").array().default(sql`ARRAY[]::text[]`), // ["weekday-evening", "weekend"]
+  therapistGenderPreference: text("therapist_gender_preference"),
+  therapistAgePreference: text("therapist_age_preference"),
+  culturalBackgroundMatch: boolean("cultural_background_match").default(false),
+  therapyApproach: text("therapy_approach").array().default(sql`ARRAY[]::text[]`), // ["CBT", "DBT"]
+  hasPreviousTherapyExperience: boolean("has_previous_therapy_experience"),
+  previousTherapyFeedback: text("previous_therapy_feedback"),
+
+  // Goals
+  treatmentGoals: text("treatment_goals"),
+  treatmentDuration: text("treatment_duration"), // "short-term", "long-term"
+
+  // Insurance
+  paymentMethod: text("payment_method"), // "insurance", "out-of-pocket"
+  insuranceProvider: text("insurance_provider"), // "bcbs", "aetna", etc.
+  budgetRange: text("budget_range"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Crisis Escalations Log
+export const chatEscalations = pgTable("chat_escalations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => chatConversations.id, { onDelete: "cascade" }),
+  escalationType: escalationTypeEnum("escalation_type").notNull(),
+  triggerMessage: text("trigger_message"), // The message that triggered escalation
+  crisisKeywords: text("crisis_keywords").array(), // Keywords detected
+  actionTaken: text("action_taken"), // "displayed_resources", "notified_staff", etc.
+  staffNotified: boolean("staff_notified").default(false),
+  staffNotifiedAt: timestamp("staff_notified_at"),
+  resolved: boolean("resolved").default(false),
+  resolvedAt: timestamp("resolved_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Therapist Match Results (Links conversations to recommended therapists)
+export const chatTherapistMatches = pgTable("chat_therapist_matches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => chatConversations.id, { onDelete: "cascade" }),
+  therapistId: varchar("therapist_id").notNull().references(() => therapists.id, { onDelete: "cascade" }),
+  matchScore: integer("match_score"), // 0-100 based on preference alignment
+  displayOrder: integer("display_order"), // Order shown to user
+  clicked: boolean("clicked").default(false),
+  clickedAt: timestamp("clicked_at"),
+  booked: boolean("booked").default(false),
+  bookedAt: timestamp("booked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ============================================
+// ZIP CODES TABLE
+// ============================================
+
+export const zipCodes = pgTable("zip_codes", {
+  zip: varchar("zip", { length: 5 }).primaryKey(),
+  city: text("city").notNull(),
+  state: varchar("state", { length: 2 }).notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 8 }),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }),
+  county: text("county"),
+  timezone: text("timezone"),
+});
+
+// ============================================
+// CHATBOT ZOD SCHEMAS
+// ============================================
+
+export const insertConversationSchema = createInsertSchema(chatConversations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMessageSchema = createInsertSchema(chatMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTokenSchema = createInsertSchema(chatTokens).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPreferencesSchema = createInsertSchema(chatPreferences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEscalationSchema = createInsertSchema(chatEscalations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertChatMatchSchema = createInsertSchema(chatTherapistMatches).omit({
+  id: true,
+  createdAt: true,
+});
+
+// ============================================
+// CHATBOT TYPES
+// ============================================
+
+export type ChatConversation = typeof chatConversations.$inferSelect;
+export type InsertChatConversation = z.infer<typeof insertConversationSchema>;
+
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type InsertChatMessage = z.infer<typeof insertMessageSchema>;
+
+export type ChatToken = typeof chatTokens.$inferSelect;
+export type InsertChatToken = z.infer<typeof insertTokenSchema>;
+
+export type ChatPreferences = typeof chatPreferences.$inferSelect;
+export type InsertChatPreferences = z.infer<typeof insertPreferencesSchema>;
+
+export type ChatEscalation = typeof chatEscalations.$inferSelect;
+export type InsertChatEscalation = z.infer<typeof insertEscalationSchema>;
+
+export type ChatTherapistMatch = typeof chatTherapistMatches.$inferSelect;
+export type InsertChatMatch = z.infer<typeof insertChatMatchSchema>;
+
+export type ZipCode = typeof zipCodes.$inferSelect;
+export type InsertZipCode = typeof zipCodes.$inferInsert;

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
+import WelcomeModal from "@/components/WelcomeModal";
 
 const FEATURED_SPECIALTIES = [
   { name: "Anxiety", icon: "🧠", count: "150+ therapists" },
@@ -49,6 +50,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
+      {/* Welcome Modal */}
+      <WelcomeModal />
+
       {/* Hero Section */}
       <section className="relative bg-gradient-to-br from-primary/10 via-background to-secondary/5 py-20 md:py-32">
         <div className="container mx-auto px-4 max-w-7xl">

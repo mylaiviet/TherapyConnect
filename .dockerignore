@@ -1,0 +1,94 @@
+# .dockerignore for KareMatch
+# Excludes files from Docker build context for faster builds and smaller images
+
+# Dependencies (will be installed in container)
+node_modules/
+client/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files (secrets come from AWS Secrets Manager in production)
+.env
+.env.*
+.env.local
+.env.*.local
+.env.aws
+.env.aws.example
+
+# Build outputs (will be generated during Docker build)
+dist/
+client/dist/
+*.tsbuildinfo
+.cache/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS files
+Thumbs.db
+desktop.ini
+
+# Documentation (not needed in container)
+*.md
+README.md
+docs/
+LOCATION_*.md
+PROXIMITY_*.md
+STOPPING_POINT.md
+AWS-MIGRATION-*.md
+
+# Test files
+tests/
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+__tests__/
+coverage/
+
+# Local development files
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# Temporary and data files
+*.log
+*.tmp
+.temp/
+data/
+*.csv
+
+# JSON data files (test data, not needed in production)
+accepting-clients.json
+houston.json
+therapists-response.json
+therapists-seed-data.json
+test-*.json
+cookies.txt
+test-cookies.txt
+nul
+
+# Infrastructure as Code (not needed in container)
+terraform/
+scripts/
+render.yaml
+
+# Deployment artifacts
+check_availability.ts
+original-seed.ts
+final-test.txt
+
+# GitHub
+.github/

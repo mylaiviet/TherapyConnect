@@ -24,9 +24,9 @@ export function Header() {
           <Link href="/">
             <div className="flex items-center space-x-2 cursor-pointer">
               <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground font-bold">
-                TC
+                KM
               </div>
-              <span className="font-bold text-xl hidden sm:inline-block">TherapyConnect</span>
+              <span className="font-bold text-xl hidden sm:inline-block">KareMatch</span>
             </div>
           </Link>
 

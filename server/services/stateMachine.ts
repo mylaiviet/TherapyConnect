@@ -494,7 +494,7 @@ function getStageQuestions(stage: ConversationStage): StageQuestion[] {
     case 'welcome':
       return [
         {
-          content: "Hi! I'm the TherapyConnect matching assistant. I'm here to help you find a therapist who's the right fit for you.\n\n⚠️ Important: I'm an automated assistant, not a therapist. I can't provide medical advice or crisis support.\n\nIf you're experiencing a mental health emergency, please call 988 (Suicide & Crisis Lifeline) or go to your nearest emergency room.\n\nAre you ready to get started?",
+          content: "Hi! I'm the KareMatch matching assistant. I'm here to help you find a therapist who's the right fit for you.\n\n⚠️ Important: I'm an automated assistant, not a therapist. I can't provide medical advice or crisis support.\n\nIf you're experiencing a mental health emergency, please call 988 (Suicide & Crisis Lifeline) or go to your nearest emergency room.\n\nAre you ready to get started?",
           hasButtonOptions: true,
           buttonOptions: [
             { id: '1', label: "Yes, let's begin", value: 'yes' },

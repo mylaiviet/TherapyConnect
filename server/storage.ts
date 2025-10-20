@@ -78,8 +78,14 @@ export interface IStorage {
 }
 
 export interface TherapistFilters {
-  location?: string;
+  // Location - separate fields
+  street?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  location?: string; // Deprecated - kept for backward compatibility
   radius?: number;
+
   specialties?: string[];
   sessionTypes?: string[];
   modalities?: string[];
@@ -89,6 +95,24 @@ export interface TherapistFilters {
   priceMin?: number;
   priceMax?: number;
   acceptingNewClients?: boolean;
+
+  // NEW FILTERS - Phase 1: Core Matching
+  gender?: string[];
+  certifications?: string[];
+  sessionLengths?: string[];
+  availableImmediately?: boolean;
+
+  // NEW FILTERS - Phase 2: Accessibility
+  wheelchairAccessible?: boolean;
+  aslCapable?: boolean;
+  serviceAnimalFriendly?: boolean;
+  virtualPlatforms?: string[];
+
+  // NEW FILTERS - Phase 3: Financial
+  consultationOffered?: boolean;
+  superbillProvided?: boolean;
+  fsaHsaAccepted?: boolean;
+
   sortBy?: string;
 }
 
@@ -158,11 +182,83 @@ export class DbStorage implements IStorage {
       conditions.push(lte(therapists.individualSessionFee, filters.priceMax));
     }
 
-    if (filters?.location) {
+    // Location matching - support both old location field and new separate fields
+    // Case-insensitive search using ILIKE (PostgreSQL) or LOWER()
+    const locationQuery = filters?.city || filters?.zipCode || filters?.location;
+    if (locationQuery) {
+      const lowerLocation = locationQuery.toLowerCase();
+
+      // Common misspellings map for fuzzy matching
+      const cityVariants = [lowerLocation];
+
+      // Add common phonetic variations
+      const commonMisspellings: Record<string, string[]> = {
+        'houston': ['huston', 'houstan', 'housten'],
+        'phoenix': ['phenix', 'pheonix', 'phoneix'],
+        'tucson': ['tuscon', 'tucsen', 'tukson'],
+        'pittsburgh': ['pittsburg', 'pitsburgh', 'pitsburg'],
+        'albuquerque': ['albequerque', 'albuquerque', 'albequerqe'],
+        'miami': ['miama', 'miani', 'miammi'],
+        'detroit': ['detroyt', 'detrot'],
+        'boston': ['bosten', 'bawston'],
+        'seattle': ['seatle', 'seatel', 'seattel'],
+        'portland': ['porland', 'portlnd'],
+        'denver': ['denvr', 'denvor'],
+        'austin': ['austen', 'astin'],
+        'dallas': ['dalas', 'dalls'],
+        'sacramento': ['sacremento', 'sacremento', 'sacromento'],
+      };
+
+      // Find matching city variants
+      for (const [correct, misspellings] of Object.entries(commonMisspellings)) {
+        if (misspellings.includes(lowerLocation)) {
+          cityVariants.push(correct);
+          break;
+        }
+        if (correct === lowerLocation) {
+          cityVariants.push(...misspellings);
+          break;
+        }
+      }
+
+      // Build OR conditions for all variants
+      const cityConditions = cityVariants.map(variant =>
+        sql`LOWER(${therapists.city}) LIKE ${`%${variant}%`}`
+      );
+
       conditions.push(
         or(
-          like(therapists.city, `%${filters.location}%`),
-          like(therapists.zipCode, `%${filters.location}%`)
+          ...cityConditions,
+          like(therapists.zipCode, `%${locationQuery}%`)
+        )
+      );
+    }
+
+    // State filter - case-insensitive, also accepts full state names
+    if (filters?.state) {
+      const stateUpper = filters.state.toUpperCase();
+      conditions.push(
+        or(
+          sql`UPPER(${therapists.state}) = ${stateUpper}`,
+          // Support full state name lookup (e.g., "Texas" -> "TX")
+          sql`UPPER(${therapists.state}) IN (
+            SELECT value FROM (VALUES
+              ('ALABAMA', 'AL'), ('ALASKA', 'AK'), ('ARIZONA', 'AZ'), ('ARKANSAS', 'AR'),
+              ('CALIFORNIA', 'CA'), ('COLORADO', 'CO'), ('CONNECTICUT', 'CT'), ('DELAWARE', 'DE'),
+              ('FLORIDA', 'FL'), ('GEORGIA', 'GA'), ('HAWAII', 'HI'), ('IDAHO', 'ID'),
+              ('ILLINOIS', 'IL'), ('INDIANA', 'IN'), ('IOWA', 'IA'), ('KANSAS', 'KS'),
+              ('KENTUCKY', 'KY'), ('LOUISIANA', 'LA'), ('MAINE', 'ME'), ('MARYLAND', 'MD'),
+              ('MASSACHUSETTS', 'MA'), ('MICHIGAN', 'MI'), ('MINNESOTA', 'MN'), ('MISSISSIPPI', 'MS'),
+              ('MISSOURI', 'MO'), ('MONTANA', 'MT'), ('NEBRASKA', 'NE'), ('NEVADA', 'NV'),
+              ('NEW HAMPSHIRE', 'NH'), ('NEW JERSEY', 'NJ'), ('NEW MEXICO', 'NM'), ('NEW YORK', 'NY'),
+              ('NORTH CAROLINA', 'NC'), ('NORTH DAKOTA', 'ND'), ('OHIO', 'OH'), ('OKLAHOMA', 'OK'),
+              ('OREGON', 'OR'), ('PENNSYLVANIA', 'PA'), ('RHODE ISLAND', 'RI'), ('SOUTH CAROLINA', 'SC'),
+              ('SOUTH DAKOTA', 'SD'), ('TENNESSEE', 'TN'), ('TEXAS', 'TX'), ('UTAH', 'UT'),
+              ('VERMONT', 'VT'), ('VIRGINIA', 'VA'), ('WASHINGTON', 'WA'), ('WEST VIRGINIA', 'WV'),
+              ('WISCONSIN', 'WI'), ('WYOMING', 'WY'), ('DISTRICT OF COLUMBIA', 'DC')
+            ) AS states(name, value)
+            WHERE UPPER(${stateUpper}) = UPPER(name) OR UPPER(${stateUpper}) = value
+          )`
         )
       );
     }
@@ -172,9 +268,11 @@ export class DbStorage implements IStorage {
     // Filter by arrays (specialties, session types, etc.) in memory
     let filtered = result;
 
+    // Case-insensitive specialty matching
     if (filters?.specialties && filters.specialties.length > 0) {
+      const lowerSpecialties = filters.specialties.map(s => s.toLowerCase());
       filtered = filtered.filter(t =>
-        t.topSpecialties?.some(s => filters.specialties!.includes(s))
+        t.topSpecialties?.some(s => lowerSpecialties.includes(s.toLowerCase()))
       );
     }
 
@@ -206,6 +304,63 @@ export class DbStorage implements IStorage {
       filtered = filtered.filter(t =>
         t.communitiesServed?.some(c => filters.communities!.includes(c))
       );
+    }
+
+    // NEW FILTERS - Phase 1: Core Matching
+    if (filters?.gender && filters.gender.length > 0) {
+      filtered = filtered.filter(t =>
+        t.gender && filters.gender!.includes(t.gender)
+      );
+    }
+
+    if (filters?.certifications && filters.certifications.length > 0) {
+      filtered = filtered.filter(t =>
+        t.certifications?.some(c => filters.certifications!.includes(c))
+      );
+    }
+
+    if (filters?.sessionLengths && filters.sessionLengths.length > 0) {
+      filtered = filtered.filter(t =>
+        t.sessionLengthOptions?.some(sl => filters.sessionLengths!.includes(sl))
+      );
+    }
+
+    if (filters?.availableImmediately) {
+      filtered = filtered.filter(t =>
+        (t.currentWaitlistWeeks || 0) === 0
+      );
+    }
+
+    // NEW FILTERS - Phase 2: Accessibility
+    if (filters?.wheelchairAccessible) {
+      filtered = filtered.filter(t => t.wheelchairAccessible === true);
+    }
+
+    if (filters?.aslCapable) {
+      filtered = filtered.filter(t => t.aslCapable === true);
+    }
+
+    if (filters?.serviceAnimalFriendly) {
+      filtered = filtered.filter(t => t.serviceAnimalFriendly === true);
+    }
+
+    if (filters?.virtualPlatforms && filters.virtualPlatforms.length > 0) {
+      filtered = filtered.filter(t =>
+        t.virtualPlatforms?.some(vp => filters.virtualPlatforms!.includes(vp))
+      );
+    }
+
+    // NEW FILTERS - Phase 3: Financial
+    if (filters?.consultationOffered) {
+      filtered = filtered.filter(t => t.consultationOffered === true);
+    }
+
+    if (filters?.superbillProvided) {
+      filtered = filtered.filter(t => t.superbillProvided === true);
+    }
+
+    if (filters?.fsaHsaAccepted) {
+      filtered = filtered.filter(t => t.fsaHsaAccepted === true);
     }
 
     // Sort
@@ -384,21 +539,29 @@ export class DbStorage implements IStorage {
 
   // Appointment Scheduling - Availability Checking
   async getAvailableSlots(therapistId: string, date: string): Promise<TimeSlot[]> {
+    // Get therapist profile with availability data
+    const therapist = await this.getTherapistById(therapistId);
+    if (!therapist) {
+      return [];
+    }
+
     // Get the day of week (0 = Sunday, 1 = Monday, etc.)
-    const dateObj = new Date(date + 'T00:00:00');
-    const dayOfWeek = dateObj.getDay();
+    // Parse date as UTC to avoid timezone issues
+    const [year, month, day] = date.split('-').map(Number);
+    const dateObj = new Date(Date.UTC(year, month - 1, day));
+    const dayOfWeek = dateObj.getUTCDay();
 
-    // Get therapist's availability for this day
-    const availability = await db
-      .select()
-      .from(therapistAvailability)
-      .where(and(
-        eq(therapistAvailability.therapistId, therapistId),
-        eq(therapistAvailability.dayOfWeek, dayOfWeek),
-        eq(therapistAvailability.isActive, true)
-      ));
+    // Map day of week to day name
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayName = dayNames[dayOfWeek];
 
-    if (availability.length === 0) {
+    // Check if therapist is available on this day
+    if (!therapist.availableDays || !therapist.availableDays.includes(dayName)) {
+      return [];
+    }
+
+    // Check if therapist has available times
+    if (!therapist.availableTimes || therapist.availableTimes.length === 0) {
       return [];
     }
 
@@ -425,19 +588,24 @@ export class DbStorage implements IStorage {
         gte(blockedTimeSlots.endDate, date)
       ));
 
-    // Generate time slots
+    // Generate time slots based on available times
     const slots: TimeSlot[] = [];
+    const slotDuration = 60; // 1 hour slots
 
-    for (const avail of availability) {
-      const startHour = parseInt(avail.startTime.split(':')[0]);
-      const startMin = parseInt(avail.startTime.split(':')[1]);
-      const endHour = parseInt(avail.endTime.split(':')[0]);
-      const endMin = parseInt(avail.endTime.split(':')[1]);
+    // Define time ranges for morning, afternoon, evening
+    const timeRanges: Record<string, { start: number; end: number }> = {
+      'morning': { start: 8 * 60, end: 12 * 60 },    // 8:00 AM - 12:00 PM
+      'afternoon': { start: 12 * 60, end: 17 * 60 }, // 12:00 PM - 5:00 PM
+      'evening': { start: 17 * 60, end: 21 * 60 }    // 5:00 PM - 9:00 PM
+    };
 
-      let currentTime = startHour * 60 + startMin; // minutes from midnight
-      const endTime = endHour * 60 + endMin;
+    // Generate slots for each available time period
+    for (const timePeriod of therapist.availableTimes) {
+      const range = timeRanges[timePeriod.toLowerCase()];
+      if (!range) continue;
 
-      while (currentTime + (avail.slotDuration || 60) <= endTime) {
+      let currentTime = range.start;
+      while (currentTime + slotDuration <= range.end) {
         const hours = Math.floor(currentTime / 60);
         const mins = currentTime % 60;
         const timeStr = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
@@ -454,10 +622,10 @@ export class DbStorage implements IStorage {
         slots.push({
           time: timeStr,
           available: !isBooked && !isBlocked,
-          duration: avail.slotDuration || 60
+          duration: slotDuration
         });
 
-        currentTime += avail.slotDuration || 60;
+        currentTime += slotDuration;
       }
     }
 

@@ -42,7 +42,7 @@ export default function ChatWindow({ onClose }: ChatWindowProps) {
             <span className="text-2xl">🤖</span>
           </div>
           <div>
-            <h3 className="font-semibold text-sm">TherapyConnect Assistant</h3>
+            <h3 className="font-semibold text-sm">KareMatch Assistant</h3>
             <p className="text-xs text-blue-100">Administrative Matching</p>
           </div>
         </div>

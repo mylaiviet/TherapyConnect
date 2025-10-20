@@ -398,7 +398,7 @@ export default function TherapistProfile() {
 
               <TabsContent value="booking" className="mt-6">
                 <BookingCalendar
-                  therapistId={therapist.userId}
+                  therapistId={therapist.id}
                   therapistName={`${therapist.firstName} ${therapist.lastName}`}
                 />
               </TabsContent>

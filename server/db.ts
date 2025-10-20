@@ -57,8 +57,6 @@ export function getDb() {
       // Connection health checks
       connection: {
         application_name: 'karematch',
-        keepalives: 1,
-        keepalives_idle: 30,     // Send keepalive every 30s
       },
 
       // Error handling

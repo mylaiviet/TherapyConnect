@@ -79,6 +79,70 @@ export const therapists = pgTable("therapists", {
   videoIntroUrl: text("video_intro_url"),
   profileViews: integer("profile_views").default(0),
   lastLogin: timestamp("last_login"),
+
+  // ============================================
+  // PHASE 1: Core Matching Fields
+  // ============================================
+
+  // Demographics & Identity (for cultural matching)
+  gender: text("gender"), // 'Male', 'Female', 'Non-binary', 'Other', 'Prefer not to say'
+  dateOfBirth: text("date_of_birth"), // Format: YYYY-MM-DD, for age calculation only, never shown publicly
+  raceEthnicity: text("race_ethnicity").array().default(sql`ARRAY[]::text[]`),
+  religiousOrientation: text("religious_orientation"), // Optional for faith-based matching
+
+  // Clinical Expertise (critical for matching)
+  certifications: text("certifications").array().default(sql`ARRAY[]::text[]`), // EMDR Certified, DBT Certified, etc.
+  primaryTheoreticalOrientation: text("primary_theoretical_orientation"), // Main therapeutic approach
+  yearsSinceGraduation: integer("years_since_graduation"), // Calculated from graduationYear
+
+  // Session Details (critical for filtering)
+  sessionLengthOptions: text("session_length_options").array().default(sql`ARRAY[]::text[]`), // ['30', '45', '60', '90']
+  currentWaitlistWeeks: integer("current_waitlist_weeks").default(0),
+
+  // ============================================
+  // PHASE 2: Accessibility & Availability
+  // ============================================
+
+  // Accessibility Features
+  wheelchairAccessible: boolean("wheelchair_accessible").default(false),
+  aslCapable: boolean("asl_capable").default(false),
+  serviceAnimalFriendly: boolean("service_animal_friendly").default(false),
+
+  // Virtual Therapy Details
+  virtualPlatforms: text("virtual_platforms").array().default(sql`ARRAY[]::text[]`), // ['Zoom', 'Google Meet', 'Doxy.me']
+  interstateLicenses: text("interstate_licenses").array().default(sql`ARRAY[]::text[]`), // State codes ['CA', 'NY', 'TX']
+
+  // Scheduling & Availability
+  averageResponseTime: text("average_response_time"), // 'Within 24 hours', 'Within 48 hours'
+  consultationOffered: boolean("consultation_offered").default(false),
+  consultationFee: integer("consultation_fee").default(0), // 0 if free
+  crisisAvailability: boolean("crisis_availability").default(false), // Available for emergency sessions
+
+  // ============================================
+  // PHASE 3: Financial & Practice Preferences
+  // ============================================
+
+  // Financial Details
+  superbillProvided: boolean("superbill_provided").default(false),
+  fsaHsaAccepted: boolean("fsa_hsa_accepted").default(false),
+  paymentPlanAvailable: boolean("payment_plan_available").default(false),
+
+  // Therapist Preferences (what they prefer to treat)
+  preferredClientAges: text("preferred_client_ages").array().default(sql`ARRAY[]::text[]`),
+  conditionsNotTreated: text("conditions_not_treated").array().default(sql`ARRAY[]::text[]`), // Issues they don't treat
+  severityLevelsAccepted: text("severity_levels_accepted").array().default(sql`ARRAY[]::text[]`), // ['Mild', 'Moderate', 'Severe']
+
+  // Quality Metrics (for advanced matching)
+  supervisesInterns: boolean("supervises_interns").default(false),
+  clientRetentionRate: decimal("client_retention_rate", { precision: 5, scale: 2 }), // Percentage (e.g., 85.50)
+
+  // ============================================
+  // PHASE 4: Multiple Photos
+  // ============================================
+
+  // Photo Collections (photoUrl remains for backwards compatibility)
+  profilePhotos: text("profile_photos").array().default(sql`ARRAY[]::text[]`), // Multiple profile photos
+  officePhotos: text("office_photos").array().default(sql`ARRAY[]::text[]`), // Office environment photos
 });
 
 // Admin users table
@@ -177,6 +241,115 @@ export const US_STATES = [
 export const LICENSE_TYPES = [
   'LCSW', 'LMFT', 'LPC', 'LPCC', 'PhD', 'PsyD', 'MD', 'DO', 'LMHC', 'LCPC'
 ];
+
+// ============================================
+// NEW CONSTANTS FOR MATCHING ENHANCEMENTS
+// ============================================
+
+export const GENDER_OPTIONS = [
+  'Male',
+  'Female',
+  'Non-binary',
+  'Other',
+  'Prefer not to say'
+];
+
+export const RACE_ETHNICITY_OPTIONS = [
+  'African American/Black',
+  'Asian',
+  'Hispanic/Latino',
+  'Native American/Indigenous',
+  'Pacific Islander',
+  'White/Caucasian',
+  'Middle Eastern',
+  'Multiracial',
+  'Other',
+  'Prefer not to say'
+];
+
+export const CERTIFICATIONS = [
+  'EMDR Certified',
+  'DBT Certified',
+  'CBT Certified',
+  'Gottman Certified (Couples Therapy)',
+  'EFT Certified (Emotionally Focused Therapy)',
+  'ACT Certified (Acceptance and Commitment Therapy)',
+  'IFS Certified (Internal Family Systems)',
+  'Brainspotting Certified',
+  'Somatic Experiencing Practitioner',
+  'Play Therapy Certified',
+  'Art Therapy Certified',
+  'Music Therapy Certified',
+  'Trauma-Informed Certified',
+  'PCIT Certified (Parent-Child Interaction Therapy)',
+  'ABA Certified (Applied Behavior Analysis)',
+  'Sandtray Therapy Certified',
+  'Neurofeedback Certified',
+  'Biofeedback Certified'
+];
+
+export const SESSION_LENGTHS = ['30', '45', '60', '90', '120']; // minutes
+
+export const VIRTUAL_PLATFORMS = [
+  'Zoom',
+  'Google Meet',
+  'Doxy.me',
+  'SimplePractice',
+  'TherapyNotes',
+  'Microsoft Teams',
+  'VSee',
+  'Skype',
+  'Other'
+];
+
+export const SEVERITY_LEVELS = ['Mild', 'Moderate', 'Severe'];
+
+export const RESPONSE_TIMES = [
+  'Within 24 hours',
+  'Within 48 hours',
+  'Within 72 hours',
+  'Within 1 week',
+  '1-2 weeks'
+];
+
+export const THEORETICAL_ORIENTATIONS = [
+  'Cognitive Behavioral (CBT)',
+  'Psychodynamic',
+  'Humanistic',
+  'Integrative/Holistic',
+  'Dialectical Behavior Therapy (DBT)',
+  'Acceptance and Commitment (ACT)',
+  'Family Systems',
+  'Gestalt',
+  'Narrative Therapy',
+  'Solution-Focused Brief Therapy',
+  'Psychoanalytic',
+  'Existential',
+  'Person-Centered',
+  'Mindfulness-Based',
+  'Trauma-Focused',
+  'Eclectic'
+];
+
+export const DOCUMENT_TYPES = [
+  'license',
+  'certification',
+  'insurance',
+  'diploma',
+  'photo',
+  'other'
+];
+
+export const ALLOWED_FILE_TYPES = {
+  images: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'],
+  documents: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  all: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+};
+
+export const MAX_FILE_SIZES = {
+  photo: 5 * 1024 * 1024, // 5MB
+  document: 10 * 1024 * 1024 // 10MB
+};
 
 // Appointment Scheduling Enums
 export const appointmentStatusEnum = pgEnum('appointment_status', ['pending', 'confirmed', 'cancelled', 'completed', 'no_show']);
@@ -408,6 +581,27 @@ export const zipCodes = pgTable("zip_codes", {
 });
 
 // ============================================
+// THERAPIST DOCUMENTS TABLE (PHASE 4)
+// ============================================
+
+export const therapistDocuments = pgTable("therapist_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull().references(() => therapists.id, { onDelete: "cascade" }),
+  documentType: text("document_type").notNull(), // 'license', 'certification', 'insurance', 'diploma', 'photo', 'other'
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(), // S3 URL or local file path
+  fileSize: integer("file_size").notNull(), // bytes
+  mimeType: text("mime_type").notNull(),
+  isVerified: boolean("is_verified").default(false),
+  verifiedBy: varchar("verified_by").references(() => users.id),
+  verifiedAt: timestamp("verified_at"),
+  expirationDate: text("expiration_date"), // For licenses/certifications (YYYY-MM-DD)
+  metadata: text("metadata"), // JSON string for additional info
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ============================================
 // CHATBOT ZOD SCHEMAS
 // ============================================
 
@@ -444,6 +638,16 @@ export const insertChatMatchSchema = createInsertSchema(chatTherapistMatches).om
 });
 
 // ============================================
+// THERAPIST DOCUMENTS ZOD SCHEMAS
+// ============================================
+
+export const insertTherapistDocumentSchema = createInsertSchema(therapistDocuments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// ============================================
 // CHATBOT TYPES
 // ============================================
 
@@ -467,3 +671,271 @@ export type InsertChatMatch = z.infer<typeof insertChatMatchSchema>;
 
 export type ZipCode = typeof zipCodes.$inferSelect;
 export type InsertZipCode = typeof zipCodes.$inferInsert;
+
+// ============================================
+// THERAPIST DOCUMENTS TYPES
+// ============================================
+
+export type TherapistDocument = typeof therapistDocuments.$inferSelect;
+export type InsertTherapistDocument = z.infer<typeof insertTherapistDocumentSchema>;
+
+// ============================================
+// ANALYTICS TABLES (Geolocation Tracking)
+// ============================================
+
+// Analytics Enums
+export const locationMethodEnum = pgEnum('location_method', ['ip', 'gps', 'manual', 'unknown']);
+export const aggregationTypeEnum = pgEnum('aggregation_type', ['daily', 'weekly', 'monthly']);
+export const userActionTypeEnum = pgEnum('user_action_type', ['search', 'profile_view', 'booking', 'account_creation']);
+
+// Page Views Table (Anonymous Traffic)
+export const pageViews = pgTable("page_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+
+  // Geographic data (city-level only)
+  city: text("city"),
+  state: text("state"),
+  country: text("country").default('USA'),
+
+  // Detection method
+  locationMethod: text("location_method"),
+
+  // Page context
+  pagePath: text("page_path"),
+  referrerDomain: text("referrer_domain"),
+
+  // Session tracking (anonymous)
+  sessionId: varchar("session_id"),
+  isNewSession: boolean("is_new_session").default(true),
+
+  // Device info (non-identifying)
+  deviceType: text("device_type"),
+  browserFamily: text("browser_family"),
+});
+
+// Location Searches Table (Search Analytics)
+export const locationSearches = pgTable("location_searches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+
+  // Search location (city-level only)
+  searchCity: text("search_city"),
+  searchState: text("search_state"),
+  searchZip: text("search_zip"),
+
+  // Search parameters
+  radiusMiles: integer("radius_miles"),
+  locationMethod: text("location_method").notNull(),
+
+  // Results
+  resultsFound: integer("results_found"),
+  resultsClicked: integer("results_clicked").default(0),
+
+  // Filters used (anonymized)
+  hadSpecialtyFilter: boolean("had_specialty_filter").default(false),
+  hadInsuranceFilter: boolean("had_insurance_filter").default(false),
+  hadModalityFilter: boolean("had_modality_filter").default(false),
+  hadGenderFilter: boolean("had_gender_filter").default(false),
+
+  // Session tracking (anonymous)
+  sessionId: varchar("session_id"),
+});
+
+// Geographic Aggregates Table (Permanent Summary)
+export const geographicAggregates = pgTable("geographic_aggregates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdAt: timestamp("created_at").defaultNow(),
+
+  // Time period
+  periodStart: text("period_start").notNull(),
+  periodEnd: text("period_end").notNull(),
+  aggregationType: text("aggregation_type").notNull(),
+
+  // Location
+  city: text("city"),
+  state: text("state").notNull(),
+  country: text("country").default('USA'),
+
+  // Metrics
+  totalVisitors: integer("total_visitors").default(0),
+  totalSearches: integer("total_searches").default(0),
+  totalResultsFound: integer("total_results_found").default(0),
+  avgSearchRadius: integer("avg_search_radius"),
+
+  // Location method breakdown
+  ipLocationCount: integer("ip_location_count").default(0),
+  gpsLocationCount: integer("gps_location_count").default(0),
+  manualLocationCount: integer("manual_location_count").default(0),
+});
+
+// User Location History Table (Registered Users - PHI)
+export const userLocationHistory = pgTable("user_location_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+
+  // Location (city-level only)
+  city: text("city"),
+  state: text("state"),
+  zipCode: text("zip_code"),
+  country: text("country").default('USA'),
+
+  // Context
+  locationMethod: text("location_method"),
+  actionType: text("action_type"),
+});
+
+// Zod Schemas for Analytics
+export const insertPageViewSchema = createInsertSchema(pageViews).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertLocationSearchSchema = createInsertSchema(locationSearches).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertGeographicAggregateSchema = createInsertSchema(geographicAggregates).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertUserLocationHistorySchema = createInsertSchema(userLocationHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for Analytics
+export type PageView = typeof pageViews.$inferSelect;
+export type InsertPageView = z.infer<typeof insertPageViewSchema>;
+
+export type LocationSearch = typeof locationSearches.$inferSelect;
+export type InsertLocationSearch = z.infer<typeof insertLocationSearchSchema>;
+
+export type GeographicAggregate = typeof geographicAggregates.$inferSelect;
+export type InsertGeographicAggregate = z.infer<typeof insertGeographicAggregateSchema>;
+
+export type UserLocationHistory = typeof userLocationHistory.$inferSelect;
+export type InsertUserLocationHistory = z.infer<typeof insertUserLocationHistorySchema>;
+
+// ============================================
+// THERAPIST ANALYTICS TABLES
+// ============================================
+
+// Therapist Profile Views (Enhanced Analytics)
+export const therapistProfileViews = pgTable("therapist_profile_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull().references(() => therapists.id, { onDelete: "cascade" }),
+  sessionId: varchar("session_id"),
+  viewedAt: timestamp("viewed_at").defaultNow().notNull(),
+  viewDurationSeconds: integer("view_duration_seconds"),
+  referrerPage: text("referrer_page"),
+  clickedBookButton: boolean("clicked_book_button").default(false),
+  deviceType: text("device_type"),
+  browserFamily: text("browser_family"),
+  city: text("city"),
+  state: text("state"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Therapist Growth Metrics
+export const therapistGrowthMetrics = pgTable("therapist_growth_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  periodStart: text("period_start").notNull(), // DATE as text (YYYY-MM-DD)
+  periodEnd: text("period_end").notNull(),
+  periodType: text("period_type").notNull(), // 'daily', 'weekly', 'monthly'
+  newSignups: integer("new_signups").default(0),
+  approvedCount: integer("approved_count").default(0),
+  rejectedCount: integer("rejected_count").default(0),
+  inactiveCount: integer("inactive_count").default(0),
+  avgApprovalTimeHours: decimal("avg_approval_time_hours", { precision: 10, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Booking Analytics (Daily Aggregates)
+export const bookingAnalytics = pgTable("booking_analytics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  periodDate: text("period_date").notNull(), // DATE as text (YYYY-MM-DD)
+  totalBookings: integer("total_bookings").default(0),
+  confirmedBookings: integer("confirmed_bookings").default(0),
+  cancelledBookings: integer("cancelled_bookings").default(0),
+  rejectedBookings: integer("rejected_bookings").default(0),
+  profileViews: integer("profile_views").default(0),
+  conversionRate: decimal("conversion_rate", { precision: 5, scale: 2 }),
+  avgResponseTimeHours: decimal("avg_response_time_hours", { precision: 10, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Search Conversion Funnel
+export const searchConversionFunnel = pgTable("search_conversion_funnel", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull(),
+  searchId: varchar("search_id"),
+  stage: text("stage").notNull(), // 'search', 'results_view', 'profile_view', 'booking_request', 'booking_confirmed'
+  therapistId: varchar("therapist_id"),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  city: text("city"),
+  state: text("state"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Specialty Demand Metrics
+export const specialtyDemandMetrics = pgTable("specialty_demand_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  periodDate: text("period_date").notNull(), // DATE as text (YYYY-MM-DD)
+  specialty: text("specialty").notNull(),
+  searchCount: integer("search_count").default(0),
+  availableTherapists: integer("available_therapists").default(0),
+  avgResultsPerSearch: decimal("avg_results_per_search", { precision: 10, scale: 2 }),
+  city: text("city"),
+  state: text("state"),
+  supplyDemandRatio: decimal("supply_demand_ratio", { precision: 10, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Zod Schemas for Therapist Analytics
+export const insertTherapistProfileViewSchema = createInsertSchema(therapistProfileViews).omit({
+  id: true,
+  createdAt: true,
+  viewedAt: true,
+});
+
+export const insertTherapistGrowthMetricsSchema = createInsertSchema(therapistGrowthMetrics).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertBookingAnalyticsSchema = createInsertSchema(bookingAnalytics).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSearchConversionFunnelSchema = createInsertSchema(searchConversionFunnel).omit({
+  id: true,
+  createdAt: true,
+  timestamp: true,
+});
+
+export const insertSpecialtyDemandMetricsSchema = createInsertSchema(specialtyDemandMetrics).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for Therapist Analytics
+export type TherapistProfileView = typeof therapistProfileViews.$inferSelect;
+export type InsertTherapistProfileView = z.infer<typeof insertTherapistProfileViewSchema>;
+
+export type TherapistGrowthMetrics = typeof therapistGrowthMetrics.$inferSelect;
+export type InsertTherapistGrowthMetrics = z.infer<typeof insertTherapistGrowthMetricsSchema>;
+
+export type BookingAnalytics = typeof bookingAnalytics.$inferSelect;
+export type InsertBookingAnalytics = z.infer<typeof insertBookingAnalyticsSchema>;
+
+export type SearchConversionFunnel = typeof searchConversionFunnel.$inferSelect;
+export type InsertSearchConversionFunnel = z.infer<typeof insertSearchConversionFunnelSchema>;
+
+export type SpecialtyDemandMetrics = typeof specialtyDemandMetrics.$inferSelect;
+export type InsertSpecialtyDemandMetrics = z.infer<typeof insertSpecialtyDemandMetricsSchema>;

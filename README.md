@@ -1,6 +1,6 @@
-# TherapyConnect
+# KareMatch
 
-A modern web platform connecting patients with qualified mental health professionals. TherapyConnect helps therapists build their professional online profiles, manage their availability, and accept appointment bookings from patients.
+A modern web platform connecting patients with qualified mental health professionals. KareMatch helps therapists build their professional online profiles, manage their availability, and accept appointment bookings from patients.
 
 ## Features
 
@@ -66,8 +66,8 @@ A modern web platform connecting patients with qualified mental health professio
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/mylaiviet/TherapyConnect.git
-cd TherapyConnect
+git clone https://github.com/mylaiviet/KareMatch.git
+cd KareMatch
 ```
 
 ### 2. Install Dependencies
@@ -116,7 +116,7 @@ npm run db:push
 #### Option B: Local PostgreSQL
 
 1. Install PostgreSQL locally
-2. Create a database: `createdb therapyconnect`
+2. Create a database: `createdb KareMatch`
 3. Update `DATABASE_URL` in `.env`
 4. Run migrations:
 
@@ -131,7 +131,7 @@ npx tsx scripts/create-admin.ts
 ```
 
 This creates an admin user:
-- Email: `admin@therapyconnect.com`
+- Email: `admin@KareMatch.com`
 - Password: `admin123`
 
 **Important**: Change this password after first login in production!
@@ -165,35 +165,17 @@ npm run check        # Run TypeScript type checking
 ## Project Structure
 
 ```
-therapyconnect/
-├── client/                    # Frontend React application
-│   ├── src/
-│   │   ├── pages/            # Page components (11 pages)
-│   │   ├── components/       # UI components (53+ components)
-│   │   │   ├── scheduling/   # Appointment scheduling components
-│   │   │   │   ├── AvailabilityManager.tsx
-│   │   │   │   ├── BookingSettings.tsx
-│   │   │   │   ├── AppointmentsList.tsx
-│   │   │   │   └── BookingCalendar.tsx
-│   │   │   └── ui/           # Shadcn UI components
-│   │   ├── lib/              # Utilities and configurations
-│   │   ├── hooks/            # Custom React hooks
-│   │   ├── App.tsx           # Main router
-│   │   └── main.tsx          # Entry point
-│   └── index.html
-├── server/                   # Express backend
-│   ├── index.ts             # Server entry point
-│   ├── routes.ts            # API endpoints (40+ routes)
-│   ├── storage.ts           # Database operations (50+ methods)
-│   ├── db.ts                # Database connection
-│   └── vite.ts              # Vite dev server setup
-├── shared/                  # Shared code between client/server
-│   └── schema.ts            # Database schemas, types, validators (8 tables)
-├── migrations/              # Database migration files
-├── scripts/                 # Utility scripts
-├── SCHEDULING_DEPLOYMENT_GUIDE.md  # Comprehensive scheduling deployment docs
-└── dist/                    # Production build output (generated)
+KareMatch/
+├── client/         # React frontend
+├── server/         # Express backend
+├── shared/         # Shared types and schemas
+├── docs/           # All documentation (see docs/README.md)
+├── scripts/        # Deployment and utility scripts
+├── migrations/     # Database migrations
+└── terraform/      # Infrastructure as code (if applicable)
 ```
+
+See [docs/README.md](docs/README.md) for complete documentation index.
 
 ## API Endpoints
 
@@ -278,7 +260,7 @@ See `shared/schema.ts` for complete schema definitions.
 
 This application is production-ready and deployed on Render. For detailed deployment instructions and troubleshooting, see [SCHEDULING_DEPLOYMENT_GUIDE.md](SCHEDULING_DEPLOYMENT_GUIDE.md).
 
-**Live URL**: https://therapyconnect-1ec4.onrender.com
+**Live URL**: https://KareMatch-1ec4.onrender.com
 
 #### Quick Deploy Checklist
 
@@ -356,7 +338,7 @@ PORT=5000                         # Render provides this automatically
 #### Phase 4: Calendar Sync (Optional)
 - ⏳ Google Calendar integration
 - ⏳ Outlook Calendar integration
-- ⏳ Two-way sync (TherapyConnect ↔ External calendars)
+- ⏳ Two-way sync (KareMatch ↔ External calendars)
 - ⏳ Automatic availability updates
 
 #### Phase 5: Enhanced Features (Future)
@@ -486,4 +468,4 @@ Contributions are welcome! Please:
 
 **Built with** ❤️ **for mental health professionals and the patients they serve**
 
-**Live Demo**: https://therapyconnect-1ec4.onrender.com
+**Live Demo**: https://KareMatch-1ec4.onrender.com

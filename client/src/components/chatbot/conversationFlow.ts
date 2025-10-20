@@ -15,7 +15,7 @@ export function getWelcomeMessages(): Message[] {
       id: uuidv4(),
       sender: 'bot',
       content:
-        "Hi! I'm the TherapyConnect matching assistant. I'm here to help you find a therapist who's the right fit for you.",
+        "Hi! I'm the KareMatch matching assistant. I'm here to help you find a therapist who's the right fit for you.",
       timestamp: new Date(),
     },
     {

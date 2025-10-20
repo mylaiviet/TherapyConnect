@@ -9,6 +9,11 @@ import { initializeConversation, processUserResponse, getConversationContext } f
 import { getSavedMatches } from "./services/therapistMatcher";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
+import { getLocationFromRequest } from "./services/ipGeolocation";
+import { trackPageView, trackLocationSearch } from "./services/analytics";
+import * as analyticsQueries from "./services/analyticsQueries";
+import * as therapistAnalytics from "./services/therapistAnalytics";
+import * as businessIntelligence from "./services/businessIntelligence";
 
 declare module 'express-session' {
   interface SessionData {
@@ -78,7 +83,7 @@ export function registerRoutes(app: Express): void {
   app.use(
     session({
       store: getSessionStore(),
-      secret: process.env.SESSION_SECRET || "therapyconnect-secret-key-change-in-production",
+      secret: process.env.SESSION_SECRET || "karematch-secret-key-change-in-production",
       resave: false,
       saveUninitialized: false,
       cookie: {
@@ -129,7 +134,15 @@ export function registerRoutes(app: Express): void {
   // Get all approved therapists with filters
   app.get("/api/therapists", async (req: Request, res: Response) => {
     try {
+      console.log('[THERAPIST SEARCH] Query params:', JSON.stringify(req.query));
+
       const filters: TherapistFilters = {
+        // New separate location fields
+        street: req.query.street as string,
+        city: req.query.city as string,
+        state: req.query.state as string,
+        zipCode: req.query.zipCode as string,
+        // Old location field for backward compatibility
         location: req.query.location as string,
         radius: req.query.radius ? parseInt(req.query.radius as string) : undefined,
         specialties: req.query.specialties ? (req.query.specialties as string).split(',') : undefined,
@@ -141,6 +154,24 @@ export function registerRoutes(app: Express): void {
         priceMin: req.query.priceMin ? parseInt(req.query.priceMin as string) : undefined,
         priceMax: req.query.priceMax ? parseInt(req.query.priceMax as string) : undefined,
         acceptingNewClients: req.query.acceptingNewClients === 'true',
+
+        // NEW FILTERS - Phase 1: Core Matching
+        gender: req.query.gender ? (req.query.gender as string).split(',') : undefined,
+        certifications: req.query.certifications ? (req.query.certifications as string).split(',') : undefined,
+        sessionLengths: req.query.sessionLengths ? (req.query.sessionLengths as string).split(',') : undefined,
+        availableImmediately: req.query.availableImmediately === 'true',
+
+        // NEW FILTERS - Phase 2: Accessibility
+        wheelchairAccessible: req.query.wheelchairAccessible === 'true',
+        aslCapable: req.query.aslCapable === 'true',
+        serviceAnimalFriendly: req.query.serviceAnimalFriendly === 'true',
+        virtualPlatforms: req.query.virtualPlatforms ? (req.query.virtualPlatforms as string).split(',') : undefined,
+
+        // NEW FILTERS - Phase 3: Financial
+        consultationOffered: req.query.consultationOffered === 'true',
+        superbillProvided: req.query.superbillProvided === 'true',
+        fsaHsaAccepted: req.query.fsaHsaAccepted === 'true',
+
         sortBy: req.query.sortBy as string,
       };
 
@@ -156,7 +187,7 @@ export function registerRoutes(app: Express): void {
   app.get("/api/therapists/:id", async (req: Request, res: Response) => {
     try {
       const therapist = await storage.getTherapistById(req.params.id);
-      
+
       if (!therapist) {
         return res.status(404).json({ error: "Therapist not found" });
       }
@@ -173,6 +204,80 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Error fetching therapist:", error);
       res.status(500).json({ error: "Failed to fetch therapist" });
+    }
+  });
+
+  // Location autocomplete search
+  app.get("/api/locations/search", async (req: Request, res: Response) => {
+    try {
+      const query = req.query.q as string;
+      const stateFilter = req.query.state as string;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+
+      console.log('[LOCATION SEARCH] Query:', query, 'State:', stateFilter, 'Limit:', limit);
+
+      if (!query || query.length < 2) {
+        console.log('[LOCATION SEARCH] Query too short, returning empty');
+        return res.json([]);
+      }
+
+      // Search therapist locations directly (cities where we have therapists)
+      const { sql } = await import('drizzle-orm');
+      const lowerQuery = `%${query.toLowerCase()}%`;
+
+      let sqlQuery;
+      if (stateFilter && stateFilter.length === 2) {
+        sqlQuery = sql`
+          SELECT DISTINCT city, state, zip_code as zip
+          FROM therapists
+          WHERE LOWER(city) LIKE ${lowerQuery}
+          AND state = ${stateFilter}
+          ORDER BY city
+          LIMIT ${limit}
+        `;
+      } else {
+        sqlQuery = sql`
+          SELECT DISTINCT city, state, zip_code as zip
+          FROM therapists
+          WHERE LOWER(city) LIKE ${lowerQuery}
+          ORDER BY city
+          LIMIT ${limit}
+        `;
+      }
+
+      const results = await db.execute(sqlQuery);
+      console.log('[LOCATION SEARCH] Results type:', typeof results, 'Keys:', Object.keys(results).join(','));
+      console.log('[LOCATION SEARCH] Has rows?', !!results.rows, 'Length:', results.rows?.length || 0);
+
+      res.json(results.rows || results);
+    } catch (error) {
+      console.error("Error searching locations:", error);
+      res.status(500).json({ error: "Failed to search locations" });
+    }
+  });
+
+  // ============================================
+  // IP GEOLOCATION ROUTES
+  // ============================================
+
+  // Get user location from IP address (no permission required)
+  app.get("/api/ip-location", async (req: Request, res: Response) => {
+    try {
+      const result = await getLocationFromRequest(req);
+
+      if (!result.success) {
+        // Return 200 with success: false for client-side fallback handling
+        return res.json(result);
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("[API] Error in /api/ip-location:", error);
+      res.status(500).json({
+        success: false,
+        method: 'ip_geolocation',
+        error: "Internal server error",
+      });
     }
   });
 
@@ -452,6 +557,381 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Error rejecting therapist:", error);
       res.status(500).json({ error: "Failed to reject therapist" });
+    }
+  });
+
+  // ============================================
+  // ANALYTICS ROUTES (Admin Only)
+  // ============================================
+
+  // Get summary statistics
+  app.get("/api/admin/analytics/summary", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const stats = await analyticsQueries.getSummaryStats(dateRange);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching summary stats:", error);
+      res.status(500).json({ error: "Failed to fetch summary statistics" });
+    }
+  });
+
+  // Get top cities
+  app.get("/api/admin/analytics/top-cities", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const cities = await analyticsQueries.getTopCities(limit, dateRange);
+      res.json(cities);
+    } catch (error) {
+      console.error("Error fetching top cities:", error);
+      res.status(500).json({ error: "Failed to fetch top cities" });
+    }
+  });
+
+  // Get location method stats
+  app.get("/api/admin/analytics/location-methods", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const stats = await analyticsQueries.getLocationMethodStats(dateRange);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching location method stats:", error);
+      res.status(500).json({ error: "Failed to fetch location method statistics" });
+    }
+  });
+
+  // Get underserved markets
+  app.get("/api/admin/analytics/underserved-markets", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const markets = await analyticsQueries.getUnderservedMarkets(dateRange);
+      res.json(markets);
+    } catch (error) {
+      console.error("Error fetching underserved markets:", error);
+      res.status(500).json({ error: "Failed to fetch underserved markets" });
+    }
+  });
+
+  // Get daily visitor trends
+  app.get("/api/admin/analytics/visitor-trends", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: "startDate and endDate are required" });
+      }
+
+      const trends = await analyticsQueries.getDailyVisitorTrends({ startDate, endDate });
+      res.json(trends);
+    } catch (error) {
+      console.error("Error fetching visitor trends:", error);
+      res.status(500).json({ error: "Failed to fetch visitor trends" });
+    }
+  });
+
+  // Get daily search trends
+  app.get("/api/admin/analytics/search-trends", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: "startDate and endDate are required" });
+      }
+
+      const trends = await analyticsQueries.getDailySearchTrends({ startDate, endDate });
+      res.json(trends);
+    } catch (error) {
+      console.error("Error fetching search trends:", error);
+      res.status(500).json({ error: "Failed to fetch search trends" });
+    }
+  });
+
+  // Get search patterns by city
+  app.get("/api/admin/analytics/search-patterns", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const patterns = await analyticsQueries.getSearchPatternsByCity(dateRange);
+      res.json(patterns);
+    } catch (error) {
+      console.error("Error fetching search patterns:", error);
+      res.status(500).json({ error: "Failed to fetch search patterns" });
+    }
+  });
+
+  // Get device and browser stats
+  app.get("/api/admin/analytics/devices", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const stats = await analyticsQueries.getDeviceStats(dateRange);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching device stats:", error);
+      res.status(500).json({ error: "Failed to fetch device statistics" });
+    }
+  });
+
+  // Get traffic sources
+  app.get("/api/admin/analytics/traffic-sources", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const sources = await analyticsQueries.getTrafficSources(dateRange);
+      res.json(sources);
+    } catch (error) {
+      console.error("Error fetching traffic sources:", error);
+      res.status(500).json({ error: "Failed to fetch traffic sources" });
+    }
+  });
+
+  // Get geographic distribution
+  app.get("/api/admin/analytics/geography", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const geography = await analyticsQueries.getVisitorsByGeography(dateRange);
+      res.json(geography);
+    } catch (error) {
+      console.error("Error fetching geography data:", error);
+      res.status(500).json({ error: "Failed to fetch geography data" });
+    }
+  });
+
+  // Get filter usage stats
+  app.get("/api/admin/analytics/filter-usage", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const stats = await analyticsQueries.getFilterUsageStats(dateRange);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching filter usage stats:", error);
+      res.status(500).json({ error: "Failed to fetch filter usage statistics" });
+    }
+  });
+
+  // ============================================
+  // THERAPIST ANALYTICS ROUTES
+  // ============================================
+
+  // Get therapist distribution by state/city
+  app.get("/api/admin/analytics/therapists/distribution", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const state = req.query.state as string;
+      const city = req.query.city as string;
+      const distribution = await therapistAnalytics.getTherapistDistribution(state, city);
+      const totalCount = distribution.reduce((sum, d) => sum + Number(d.totalTherapists), 0);
+      console.error(`[DIST-API] Returned ${distribution.length} groups, ${totalCount} total therapists`);
+      res.json(distribution);
+    } catch (error) {
+      console.error("[DIST-API] Error:", error);
+      res.status(500).json({ error: "Failed to fetch therapist distribution" });
+    }
+  });
+
+  // Get therapy types breakdown
+  app.get("/api/admin/analytics/therapists/therapy-types", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const breakdown = await therapistAnalytics.getTherapyTypeBreakdown();
+      res.json(breakdown);
+    } catch (error) {
+      console.error("Error fetching therapy types:", error);
+      res.status(500).json({ error: "Failed to fetch therapy types" });
+    }
+  });
+
+  // Get specializations breakdown
+  app.get("/api/admin/analytics/therapists/specializations", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const breakdown = await therapistAnalytics.getSpecializationBreakdown();
+      res.json(breakdown);
+    } catch (error) {
+      console.error("Error fetching specializations:", error);
+      res.status(500).json({ error: "Failed to fetch specializations" });
+    }
+  });
+
+  // Get top performing therapists
+  app.get("/api/admin/analytics/therapists/top-performers", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const performers = await therapistAnalytics.getTopPerformers(dateRange, limit);
+      res.json(performers);
+    } catch (error) {
+      console.error("Error fetching top performers:", error);
+      res.status(500).json({ error: "Failed to fetch top performers" });
+    }
+  });
+
+  // Get low engagement therapists
+  app.get("/api/admin/analytics/therapists/low-engagement", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const therapists = await therapistAnalytics.getLowEngagementTherapists(limit);
+      res.json(therapists);
+    } catch (error) {
+      console.error("Error fetching low engagement therapists:", error);
+      res.status(500).json({ error: "Failed to fetch low engagement therapists" });
+    }
+  });
+
+  // Get booking performance
+  app.get("/api/admin/analytics/therapists/booking-performance", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const performance = await therapistAnalytics.getBookingPerformance(dateRange);
+      res.json(performance);
+    } catch (error) {
+      console.error("Error fetching booking performance:", error);
+      res.status(500).json({ error: "Failed to fetch booking performance" });
+    }
+  });
+
+  // Get growth metrics
+  app.get("/api/admin/analytics/therapists/growth", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const metrics = await therapistAnalytics.getGrowthMetrics();
+      res.json(metrics);
+    } catch (error) {
+      console.error("Error fetching growth metrics:", error);
+      res.status(500).json({ error: "Failed to fetch growth metrics" });
+    }
+  });
+
+  // Get therapists by region (drill-down)
+  app.get("/api/admin/analytics/therapists/by-region", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const state = req.query.state as string;
+      const city = req.query.city as string;
+
+      if (!state) {
+        return res.status(400).json({ error: "State is required" });
+      }
+
+      const therapists = await therapistAnalytics.getTherapistsByRegion(state, city);
+      res.json(therapists);
+    } catch (error) {
+      console.error("Error fetching therapists by region:", error);
+      res.status(500).json({ error: "Failed to fetch therapists by region" });
+    }
+  });
+
+  // ============================================
+  // BUSINESS INTELLIGENCE ROUTES
+  // ============================================
+
+  // Get supply vs demand analysis
+  app.get("/api/admin/analytics/business/supply-demand", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const analysis = await businessIntelligence.getSupplyDemandAnalysis(dateRange);
+      res.json(analysis);
+    } catch (error) {
+      console.error("Error fetching supply demand analysis:", error);
+      res.status(500).json({ error: "Failed to fetch supply demand analysis" });
+    }
+  });
+
+  // Get insurance coverage gaps
+  app.get("/api/admin/analytics/business/insurance-gaps", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const gaps = await businessIntelligence.getInsuranceCoverageGaps();
+      res.json(gaps);
+    } catch (error) {
+      console.error("Error fetching insurance gaps:", error);
+      res.status(500).json({ error: "Failed to fetch insurance coverage gaps" });
+    }
+  });
+
+  // Get conversion funnel
+  app.get("/api/admin/analytics/business/conversion-funnel", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const funnel = await businessIntelligence.getConversionFunnel(dateRange);
+      res.json(funnel);
+    } catch (error) {
+      console.error("Error fetching conversion funnel:", error);
+      res.status(500).json({ error: "Failed to fetch conversion funnel" });
+    }
+  });
+
+  // Get search effectiveness
+  app.get("/api/admin/analytics/business/search-effectiveness", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const effectiveness = await businessIntelligence.getSearchEffectiveness(dateRange);
+      res.json(effectiveness);
+    } catch (error) {
+      console.error("Error fetching search effectiveness:", error);
+      res.status(500).json({ error: "Failed to fetch search effectiveness" });
+    }
+  });
+
+  // Get pricing insights
+  app.get("/api/admin/analytics/business/pricing", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const insights = await businessIntelligence.getPricingInsights();
+      res.json(insights);
+    } catch (error) {
+      console.error("Error fetching pricing insights:", error);
+      res.status(500).json({ error: "Failed to fetch pricing insights" });
+    }
+  });
+
+  // Get user behavior patterns
+  app.get("/api/admin/analytics/business/user-behavior", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const dateRange = startDate && endDate ? { startDate, endDate } : undefined;
+
+      const patterns = await businessIntelligence.getUserBehaviorPatterns(dateRange);
+      res.json(patterns);
+    } catch (error) {
+      console.error("Error fetching user behavior patterns:", error);
+      res.status(500).json({ error: "Failed to fetch user behavior patterns" });
     }
   });
 

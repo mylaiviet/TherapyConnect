@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 
 async function createAdmin() {
-  const email = "admin@therapyconnect.com";
+  const email = "admin@karematch.com";
   const password = "admin123";
 
   // Check if admin user already exists

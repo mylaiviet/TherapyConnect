@@ -234,6 +234,76 @@ function calculateMatchScore(
     reasons.push(`${therapist.yearsInPractice}+ years of experience`);
   }
 
+  // NEW MATCHING - Phase 1: Core Matching
+  // Gender preference match
+  if (prefs.genderPreference && prefs.genderPreference !== 'no-preference') {
+    if (therapist.gender === prefs.genderPreference) {
+      score += 10;
+      reasons.push(`${therapist.gender} therapist`);
+    }
+  }
+
+  // Immediate availability match
+  if (prefs.urgency === 'immediate' || prefs.urgency === 'asap') {
+    if ((therapist.currentWaitlistWeeks || 0) === 0) {
+      score += 15;
+      reasons.push('Available immediately');
+    }
+  } else if (prefs.urgency === 'within-month') {
+    if ((therapist.currentWaitlistWeeks || 0) <= 4) {
+      score += 10;
+      reasons.push('Available within a month');
+    }
+  }
+
+  // Session length preference match
+  if (prefs.sessionLength && therapist.sessionLengthOptions) {
+    if (therapist.sessionLengthOptions.includes(prefs.sessionLength)) {
+      score += 8;
+      reasons.push(`Offers ${prefs.sessionLength} sessions`);
+    }
+  }
+
+  // NEW MATCHING - Phase 2: Accessibility
+  if (prefs.wheelchairAccessible && therapist.wheelchairAccessible) {
+    score += 12;
+    reasons.push('Wheelchair accessible');
+  }
+
+  if (prefs.aslRequired && therapist.aslCapable) {
+    score += 12;
+    reasons.push('ASL capable');
+  }
+
+  if (prefs.serviceAnimal && therapist.serviceAnimalFriendly) {
+    score += 10;
+    reasons.push('Service animal friendly');
+  }
+
+  // Virtual platform preference
+  if (prefs.virtualPlatform && therapist.virtualPlatforms) {
+    if (therapist.virtualPlatforms.includes(prefs.virtualPlatform)) {
+      score += 8;
+      reasons.push(`Uses ${prefs.virtualPlatform}`);
+    }
+  }
+
+  // NEW MATCHING - Phase 3: Financial
+  if (prefs.consultationNeeded && therapist.consultationOffered) {
+    score += 8;
+    reasons.push('Offers free consultation');
+  }
+
+  if (prefs.superbillNeeded && therapist.superbillProvided) {
+    score += 10;
+    reasons.push('Provides superbill');
+  }
+
+  if (prefs.fsaHsa && therapist.fsaHsaAccepted) {
+    score += 8;
+    reasons.push('Accepts FSA/HSA');
+  }
+
   // Has bio and photo (completeness bonus)
   if (therapist.bio && therapist.bio.length > 100) {
     score += 3;
@@ -256,7 +326,7 @@ async function saveMatchesToDatabase(
         conversationId,
         therapistId: match.id,
         matchScore: match.matchScore,
-        matchReasons: match.matchReasons,
+        // matchReasons stored in-memory only, not persisted to DB
       })
       .onConflictDoNothing(); // Prevent duplicates
   }
@@ -281,8 +351,9 @@ export async function getSavedMatches(
 
       return {
         ...therapist,
-        matchScore: match.matchScore,
-        matchReasons: match.matchReasons || [],
+        matchScore: match.matchScore || 0,
+        matchReasons: [], // Reasons not persisted, would need to recalculate
+        distance: null,
       };
     })
   );

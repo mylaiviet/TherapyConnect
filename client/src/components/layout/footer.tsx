@@ -6,7 +6,7 @@ export function Footer() {
       <div className="container mx-auto px-4 max-w-7xl py-8">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div>
-            <h3 className="font-semibold mb-3">TherapyConnect</h3>
+            <h3 className="font-semibold mb-3">KareMatch</h3>
             <p className="text-sm text-muted-foreground">
               Connecting you with qualified, licensed therapists in your area.
             </p>
@@ -16,8 +16,8 @@ export function Footer() {
             <h4 className="font-semibold mb-3">For Patients</h4>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link href="/therapists">
-                  <a className="text-muted-foreground hover:text-primary">Find a Therapist</a>
+                <Link href="/therapists" className="text-muted-foreground hover:text-primary">
+                  Find a Therapist
                 </Link>
               </li>
               <li>
@@ -33,13 +33,13 @@ export function Footer() {
             <h4 className="font-semibold mb-3">For Therapists</h4>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link href="/signup">
-                  <a className="text-muted-foreground hover:text-primary">Join Our Network</a>
+                <Link href="/signup" className="text-muted-foreground hover:text-primary">
+                  Join Our Network
                 </Link>
               </li>
               <li>
-                <Link href="/login">
-                  <a className="text-muted-foreground hover:text-primary">Therapist Login</a>
+                <Link href="/login" className="text-muted-foreground hover:text-primary">
+                  Therapist Login
                 </Link>
               </li>
               <li>
@@ -65,7 +65,7 @@ export function Footer() {
         </div>
 
         <div className="mt-8 pt-6 border-t text-center text-sm text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} TherapyConnect. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} KareMatch. All rights reserved.</p>
           <p className="mt-2">
             This is a HIPAA-exempt directory service. No patient information is collected.
           </p>

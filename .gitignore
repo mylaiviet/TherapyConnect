@@ -28,5 +28,10 @@ npm-debug.log*
 # Sensitive data
 therapist-credentials.txt
 
+# GeoIP databases (must be downloaded separately)
+server/data/*.mmdb
+server/data/*.dat
+server/data/GeoLite2-*
+
 # Vercel
 .vercel

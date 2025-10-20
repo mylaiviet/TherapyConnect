@@ -6,18 +6,15 @@ $ErrorActionPreference = "Stop"
 Write-Host "=== KareMatch AMD64 Deployment Script ===" -ForegroundColor Blue
 Write-Host ""
 
-# Step 1: Clone/update repository
-if (-not (Test-Path "TherapyConnect")) {
-    Write-Host "[1/6] Cloning repository..." -ForegroundColor Yellow
-    # Replace with your actual repo URL
-    # git clone <YOUR_REPO_URL> TherapyConnect
-    Write-Host "Please clone your repository first, then run this script from inside it" -ForegroundColor Red
+# Step 1: Verify we're in the repository
+Write-Host "[1/6] Verifying repository..." -ForegroundColor Yellow
+if (-not (Test-Path ".git")) {
+    Write-Host "Error: Not in a git repository. Please run this script from the repository root." -ForegroundColor Red
     exit 1
-} else {
-    Write-Host "[1/6] Using existing repository..." -ForegroundColor Yellow
-    # Uncomment to auto-pull:
-    # git pull origin aws-migration
 }
+Write-Host "✅ Repository verified" -ForegroundColor Green
+# Uncomment to auto-pull latest changes:
+# git pull origin aws-migration
 
 # Step 2: Build Docker image
 Write-Host ""

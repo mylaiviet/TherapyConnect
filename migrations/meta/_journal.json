@@ -8,6 +8,13 @@
       "when": 1760747069659,
       "tag": "0000_nasty_smiling_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1760946244984,
+      "tag": "0001_furry_satana",
+      "breakpoints": true
     }
   ]
 }

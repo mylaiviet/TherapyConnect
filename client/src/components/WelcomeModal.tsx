@@ -21,7 +21,7 @@ export default function WelcomeModal({ onDismiss }: WelcomeModalProps) {
 
   useEffect(() => {
     // Check if user has seen the modal before
-    const hasSeenModal = localStorage.getItem('therapyconnect_welcome_seen');
+    const hasSeenModal = localStorage.getItem('karematch_welcome_seen');
 
     if (!hasSeenModal) {
       // Show modal after a brief delay for better UX
@@ -34,8 +34,8 @@ export default function WelcomeModal({ onDismiss }: WelcomeModalProps) {
 
   const handleChoice = (choice: 'match' | 'browse') => {
     // Track user choice
-    localStorage.setItem('therapyconnect_welcome_seen', 'true');
-    localStorage.setItem('therapyconnect_user_preference', choice);
+    localStorage.setItem('karematch_welcome_seen', 'true');
+    localStorage.setItem('karematch_user_preference', choice);
 
     // Analytics tracking (placeholder - integrate with your analytics service)
     if (typeof window !== 'undefined' && (window as any).analytics) {
@@ -65,7 +65,7 @@ export default function WelcomeModal({ onDismiss }: WelcomeModalProps) {
   };
 
   const handleClose = () => {
-    localStorage.setItem('therapyconnect_welcome_seen', 'true');
+    localStorage.setItem('karematch_welcome_seen', 'true');
     setIsOpen(false);
     onDismiss?.();
   };
@@ -75,7 +75,7 @@ export default function WelcomeModal({ onDismiss }: WelcomeModalProps) {
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-center mb-2">
-            Welcome to TherapyConnect! 👋
+            Welcome to KareMatch! 👋
           </DialogTitle>
           <DialogDescription className="text-center text-base">
             Would you like help navigating our website or finding a therapist?

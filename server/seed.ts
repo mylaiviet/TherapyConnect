@@ -274,7 +274,7 @@ async function generateTherapists() {
   const fs = await import('fs/promises');
   await fs.writeFile(
     'therapist-credentials.txt',
-    `TherapyConnect - Test Therapist Credentials
+    `KareMatch - Test Therapist Credentials
 ${"=".repeat(80)}
 
 All accounts use password: Test123!

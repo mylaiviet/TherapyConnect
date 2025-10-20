@@ -4,6 +4,7 @@ import { createServer } from "http";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { loadSecrets } from "./lib/secrets";
+import { initializeGeoIP } from "./services/ipGeolocation";
 
 const app = express();
 
@@ -61,6 +62,12 @@ app.use((req, res, next) => {
     // This must happen before any database connections or route registration
     await loadSecrets();
     console.log("✅ Secrets loaded");
+
+    // Initialize IP Geolocation service (non-blocking)
+    // Will log warning if database file not found, but won't crash
+    initializeGeoIP().catch(err => {
+      console.warn("⚠️  GeoIP initialization failed (non-critical):", err.message);
+    });
 
     // Health check endpoint for AWS ECS/ALB and Docker
     // Must respond quickly without database dependencies

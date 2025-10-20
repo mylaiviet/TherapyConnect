@@ -20,11 +20,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useState } from "react";
-import { CheckCircle, XCircle, Eye, Clock, Users } from "lucide-react";
+import { CheckCircle, XCircle, Eye, Clock, Users, BarChart3, TrendingUp, Target } from "lucide-react";
 import { type Therapist } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import AnalyticsDashboard from "@/components/admin/AnalyticsDashboard";
+import TherapistAnalyticsDashboard from "@/components/admin/TherapistAnalyticsDashboard";
+import BusinessIntelligenceDashboard from "@/components/admin/BusinessIntelligenceDashboard";
 
 export default function AdminDashboard() {
   const [selectedTherapist, setSelectedTherapist] = useState<Therapist | null>(null);
@@ -161,6 +164,18 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="all" data-testid="tab-all">
               All Therapists
+            </TabsTrigger>
+            <TabsTrigger value="analytics" data-testid="tab-analytics">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Website Traffic
+            </TabsTrigger>
+            <TabsTrigger value="therapist-analytics" data-testid="tab-therapist-analytics">
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Therapist Analytics
+            </TabsTrigger>
+            <TabsTrigger value="business-intelligence" data-testid="tab-business-intelligence">
+              <Target className="h-4 w-4 mr-2" />
+              Business Intel
             </TabsTrigger>
           </TabsList>
 
@@ -337,6 +352,18 @@ export default function AdminDashboard() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="analytics" className="mt-6">
+            <AnalyticsDashboard />
+          </TabsContent>
+
+          <TabsContent value="therapist-analytics" className="mt-6">
+            <TherapistAnalyticsDashboard />
+          </TabsContent>
+
+          <TabsContent value="business-intelligence" className="mt-6">
+            <BusinessIntelligenceDashboard />
           </TabsContent>
         </Tabs>
 

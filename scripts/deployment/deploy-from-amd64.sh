@@ -6,16 +6,15 @@ set -e  # Exit on error
 echo "=== KareMatch AMD64 Deployment Script ==="
 echo ""
 
-# Step 1: Clone the repository (if not already)
-if [ ! -d "TherapyConnect" ]; then
-    echo "[1/6] Cloning repository..."
-    git clone <YOUR_REPO_URL> TherapyConnect
-    cd TherapyConnect
-else
-    echo "[1/6] Repository exists, pulling latest..."
-    cd TherapyConnect
-    git pull origin aws-migration
+# Step 1: Verify we're in the repository
+echo "[1/6] Verifying repository..."
+if [ ! -d ".git" ]; then
+    echo "Error: Not in a git repository. Please run this script from the repository root."
+    exit 1
 fi
+echo "✅ Repository verified"
+# Uncomment to auto-pull latest changes:
+# git pull origin aws-migration
 
 # Step 2: Build Docker image
 echo ""

@@ -12,6 +12,7 @@ import {
   GetSecretValueCommand,
   GetSecretValueCommandOutput
 } from "@aws-sdk/client-secrets-manager";
+import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 
 /**
  * Application secrets structure
@@ -31,6 +32,11 @@ export interface AppSecrets {
 let secretsClient: SecretsManagerClient | null = null;
 
 /**
+ * SSM (Systems Manager Parameter Store) client singleton
+ */
+let ssmClient: SSMClient | null = null;
+
+/**
  * Initialize AWS Secrets Manager client
  * Only created when running in AWS (not local development)
  */
@@ -44,6 +50,18 @@ function getSecretsClient(): SecretsManagerClient {
 }
 
 /**
+ * Initialize AWS SSM client for Parameter Store
+ */
+function getSSMClient(): SSMClient {
+  if (!ssmClient) {
+    ssmClient = new SSMClient({
+      region: process.env.AWS_REGION || "us-east-1",
+    });
+  }
+  return ssmClient;
+}
+
+/**
  * Check if running in AWS environment
  * AWS ECS sets these environment variables automatically
  */
@@ -53,6 +71,29 @@ function isAWSEnvironment(): boolean {
     process.env.ECS_CONTAINER_METADATA_URI ||
     process.env.AWS_SECRET_NAME
   );
+}
+
+/**
+ * Fetch parameter from AWS Systems Manager Parameter Store
+ * @param paramName - Name of the parameter (e.g., /karematch/database-url)
+ * @returns Parameter value or null on error
+ */
+async function fetchParameterFromSSM(paramName: string): Promise<string | null> {
+  try {
+    const client = getSSMClient();
+    const command = new GetParameterCommand({
+      Name: paramName,
+      WithDecryption: true,
+    });
+
+    const response = await client.send(command);
+    return response.Parameter?.Value || null;
+  } catch (error) {
+    console.error(`Failed to fetch parameter ${paramName}:`, {
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+    return null;
+  }
 }
 
 /**
@@ -139,26 +180,56 @@ function validateSecrets(secrets: AppSecrets): void {
  * Main function: Load application secrets
  *
  * Decision tree:
- * 1. If AWS_SECRET_NAME is set → Fetch from AWS Secrets Manager
- * 2. Else → Load from process.env (local development)
+ * 1. If USE_PARAMETER_STORE is true → Fetch from AWS Parameter Store
+ * 2. Else if AWS_SECRET_NAME is set → Fetch from AWS Secrets Manager
+ * 3. Else → Load from process.env (local development)
  *
  * @returns Application secrets
  * @throws Error if secrets are invalid or missing
  */
 export async function loadSecrets(): Promise<AppSecrets> {
   const secretName = process.env.AWS_SECRET_NAME;
+  const useParameterStore = process.env.USE_PARAMETER_STORE === "true";
   const isAWS = isAWSEnvironment();
 
   console.log("Loading secrets...", {
     environment: process.env.NODE_ENV,
     isAWS,
+    useParameterStore,
     hasSecretName: !!secretName,
   });
 
   let secrets: AppSecrets;
 
-  if (isAWS && secretName) {
-    // Production: Fetch from AWS Secrets Manager
+  if (isAWS && useParameterStore) {
+    // OPTION 1: AWS Parameter Store (Lightsail setup)
+    console.log("Fetching secrets from AWS Systems Manager Parameter Store");
+
+    const [databaseUrl, sessionSecret, encryptionKey] = await Promise.all([
+      fetchParameterFromSSM("/karematch/database-url"),
+      fetchParameterFromSSM("/karematch/session-secret"),
+      fetchParameterFromSSM("/karematch/encryption-key"),
+    ]);
+
+    if (!databaseUrl || !sessionSecret || !encryptionKey) {
+      throw new Error(
+        "Failed to load one or more parameters from Parameter Store. " +
+        "Check IAM permissions and parameter names."
+      );
+    }
+
+    secrets = {
+      DATABASE_URL: databaseUrl,
+      SESSION_SECRET: sessionSecret,
+      ENCRYPTION_KEY: encryptionKey,
+      AWS_REGION: process.env.AWS_REGION,
+      NODE_ENV: process.env.NODE_ENV || "production",
+    };
+
+    console.log("✅ Successfully loaded secrets from Parameter Store");
+
+  } else if (isAWS && secretName) {
+    // OPTION 2: AWS Secrets Manager (original code)
     console.log(`Fetching secrets from AWS Secrets Manager: ${secretName}`);
     const awsSecrets = await fetchSecretFromAWS(secretName);
 
@@ -177,7 +248,8 @@ export async function loadSecrets(): Promise<AppSecrets> {
       NODE_ENV: process.env.NODE_ENV || "production",
     };
 
-    console.log("Successfully loaded secrets from AWS Secrets Manager");
+    console.log("✅ Successfully loaded secrets from Secrets Manager");
+
   } else {
     // Local development: Use environment variables
     console.log("Loading secrets from environment variables (local mode)");
@@ -187,7 +259,12 @@ export async function loadSecrets(): Promise<AppSecrets> {
   // Validate all required secrets are present and valid
   validateSecrets(secrets);
 
-  console.log("Secrets loaded and validated successfully");
+  // Set process.env so other modules can access
+  process.env.DATABASE_URL = secrets.DATABASE_URL;
+  process.env.SESSION_SECRET = secrets.SESSION_SECRET;
+  process.env.ENCRYPTION_KEY = secrets.ENCRYPTION_KEY;
+
+  console.log("✅ Secrets loaded and validated");
 
   return secrets;
 }

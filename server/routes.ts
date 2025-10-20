@@ -28,21 +28,56 @@ export function registerRoutes(app: Express): void {
     process.env.AWS_SECRET_NAME
   );
 
-  const sessionStore = process.env.NODE_ENV === "production"
-    ? new PgSession({
-        conObject: {
-          connectionString: process.env.DATABASE_URL,
-          ssl: isAWSEnvironment ? { rejectUnauthorized: true } : false
-        },
-        tableName: 'session',
-        createTableIfMissing: true,
-      })
-    : undefined; // Use default MemoryStore in development
+  // Lazy session store initialization
+  let sessionStore: session.Store | undefined;
+  let sessionStoreInitialized = false;
 
-  // Session middleware
+  const getSessionStore = (): session.Store | undefined => {
+    if (process.env.NODE_ENV !== "production") {
+      return undefined; // Use MemoryStore in development
+    }
+
+    if (!sessionStoreInitialized) {
+      try {
+        console.log("Initializing PostgreSQL session store...");
+
+        sessionStore = new PgSession({
+          conObject: {
+            connectionString: process.env.DATABASE_URL,
+            ssl: isAWSEnvironment ? { rejectUnauthorized: false } : false,
+            // Connection pool settings for session store
+            max: 3,                     // Max 3 connections for session store
+            min: 1,
+            idleTimeoutMillis: 60000,   // 60s
+            connectionTimeoutMillis: 10000,
+          },
+          tableName: 'session',
+          createTableIfMissing: true,
+          // Error handling
+          errorLog: (error: Error) => {
+            console.error("Session store error:", error.message);
+          },
+        });
+
+        sessionStoreInitialized = true;
+        console.log("✅ Session store initialized");
+
+      } catch (error) {
+        console.error("❌ Failed to initialize session store:", error);
+        // Fall back to MemoryStore (will work but won't persist across restarts)
+        console.warn("⚠️  Falling back to MemoryStore - sessions won't persist!");
+        sessionStore = undefined;
+        sessionStoreInitialized = true;  // Don't retry
+      }
+    }
+
+    return sessionStore;
+  };
+
+  // Session middleware with lazy store initialization
   app.use(
     session({
-      store: sessionStore,
+      store: getSessionStore(),
       secret: process.env.SESSION_SECRET || "therapyconnect-secret-key-change-in-production",
       resave: false,
       saveUninitialized: false,

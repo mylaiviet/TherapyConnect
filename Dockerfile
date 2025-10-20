@@ -72,5 +72,6 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
 ENV NODE_ENV=production
 ENV PORT=5000
 
-# Start application
-CMD ["node", "dist/index.js"]
+# Start application with memory limit for 512MB container
+# Limit heap to 384MB (leaves 128MB for OS and overhead)
+CMD ["node", "--max-old-space-size=384", "dist/index.js"]

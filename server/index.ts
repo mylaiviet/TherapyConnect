@@ -46,29 +46,46 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Load secrets from AWS Secrets Manager (production) or .env (local)
-  // This must happen before any database connections or route registration
   try {
-    await loadSecrets();
-    log("Application secrets loaded successfully");
-  } catch (error) {
-    console.error("FATAL: Failed to load application secrets:", error);
-    process.exit(1);
-  }
+    console.log("=== KareMatch Container Starting ===");
+    console.log("NODE_ENV:", process.env.NODE_ENV);
+    console.log("PORT:", process.env.PORT);
+    console.log("AWS_REGION:", process.env.AWS_REGION);
+    console.log("USE_PARAMETER_STORE:", process.env.USE_PARAMETER_STORE);
+    console.log("Has DATABASE_URL:", !!process.env.DATABASE_URL);
+    console.log("Has SESSION_SECRET:", !!process.env.SESSION_SECRET);
+    console.log("Has ENCRYPTION_KEY:", !!process.env.ENCRYPTION_KEY);
+    console.log("");
 
-  // Health check endpoint for AWS ECS/ALB and Docker
-  // Must respond quickly without database dependencies
-  app.get("/health", (_req: Request, res: Response) => {
-    res.status(200).json({
-      status: "healthy",
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      environment: process.env.NODE_ENV || "development",
+    // Load secrets from AWS Parameter Store/Secrets Manager or .env
+    // This must happen before any database connections or route registration
+    await loadSecrets();
+    console.log("✅ Secrets loaded");
+
+    // Health check endpoint for AWS ECS/ALB and Docker
+    // Must respond quickly without database dependencies
+    app.get("/health", (_req: Request, res: Response) => {
+      const memUsage = process.memoryUsage();
+      const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+      const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
+
+      res.status(200).json({
+        status: "healthy",
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        environment: process.env.NODE_ENV || "development",
+        memory: {
+          heapUsed: `${heapUsedMB}MB`,
+          heapTotal: `${heapTotalMB}MB`,
+          percentage: Math.round((heapUsedMB / 384) * 100) + "%",
+        },
+      });
     });
-  });
+    console.log("✅ Health endpoint registered");
 
   // Register all API routes
   registerRoutes(app);
+  console.log("✅ Routes registered");
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -86,8 +103,10 @@ app.use((req, res, next) => {
   // doesn't interfere with the other routes
   if (process.env.NODE_ENV !== "production") {
     await setupVite(app, server);
+    console.log("✅ Vite development server configured");
   } else {
     serveStatic(app);
+    console.log("✅ Static files configured");
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
@@ -98,4 +117,61 @@ app.use((req, res, next) => {
   server.listen(port, "0.0.0.0", () => {
     log(`serving on port ${port}`);
   });
+
+  // ========== GRACEFUL SHUTDOWN HANDLING ==========
+
+  let isShuttingDown = false;
+
+  const gracefulShutdown = async (signal: string) => {
+    if (isShuttingDown) {
+      console.log("Shutdown already in progress...");
+      return;
+    }
+
+    isShuttingDown = true;
+    console.log(`\n${signal} received - starting graceful shutdown`);
+
+    // Stop accepting new requests
+    server.close(() => {
+      console.log("✅ HTTP server closed");
+    });
+
+    try {
+      // Close database connections
+      const dbClient = (global as any).__dbClient;
+      if (dbClient && typeof dbClient.end === 'function') {
+        await dbClient.end({ timeout: 5 });
+        console.log("✅ Database connections closed");
+      }
+
+      console.log("✅ Graceful shutdown complete");
+      process.exit(0);
+
+    } catch (error) {
+      console.error("❌ Error during shutdown:", error);
+      process.exit(1);
+    }
+  };
+
+  // Handle shutdown signals
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+  // Handle uncaught errors
+  process.on('uncaughtException', (error) => {
+    console.error('💥 Uncaught Exception:', error);
+    gracefulShutdown('UNCAUGHT_EXCEPTION');
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+    gracefulShutdown('UNHANDLED_REJECTION');
+  });
+
+  } catch (error) {
+    console.error("❌ FATAL STARTUP ERROR:", error);
+    console.error("Stack:", error instanceof Error ? error.stack : "No stack");
+    console.log("Waiting 60s before exit to allow log viewing...");
+    setTimeout(() => process.exit(1), 60000);
+  }
 })();

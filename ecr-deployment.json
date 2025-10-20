@@ -1,0 +1,30 @@
+{
+  "containers": {
+    "karematch": {
+      "image": "051826703172.dkr.ecr.us-east-1.amazonaws.com/karematch:latest",
+      "environment": {
+        "USE_PARAMETER_STORE": "true",
+        "AWS_REGION": "us-east-1",
+        "NODE_ENV": "production",
+        "PORT": "5000",
+        "DATABASE_URL": "postgresql://postgres:Welcome2ppmsi%21@karematch-db.cm1ksgqm0c00.us-east-1.rds.amazonaws.com:5432/postgres?sslmode=no-verify",
+        "SESSION_SECRET": "ire9naslXt6kh8DPqPm+KACgT6YMqv95VQl4r2v+YAHumjMYoyKBVFIXbDyOSDXg",
+        "ENCRYPTION_KEY": "pDKEOfmV0N8nm4AsxAq4FsF+erq1ijJ1Qx5NMw+0NfM="
+      },
+      "ports": {
+        "5000": "HTTP"
+      }
+    }
+  },
+  "publicEndpoint": {
+    "containerName": "karematch",
+    "containerPort": 5000,
+    "healthCheck": {
+      "path": "/health",
+      "intervalSeconds": 10,
+      "timeoutSeconds": 8,
+      "healthyThreshold": 2,
+      "unhealthyThreshold": 3
+    }
+  }
+}

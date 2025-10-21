@@ -29,6 +29,7 @@ function Router() {
       <Route path="/signup" component={Signup} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/dashboard" component={TherapistDashboard} />
+      <Route path="/therapist-dashboard" component={TherapistDashboard} />
       <Route path="/dashboard/profile" component={ProfileEditor} />
       <Route path="/admin" component={AdminDashboard} />
       <Route component={NotFound} />

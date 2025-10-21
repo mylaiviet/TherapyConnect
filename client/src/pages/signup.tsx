@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { UserPlus, Eye, EyeOff } from "lucide-react";
+import { setUserId } from "@/services/analytics";
 
 const signupSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -46,9 +47,12 @@ export default function Signup() {
   });
 
   const signupMutation = useMutation({
-    mutationFn: (data: { email: string; password: string }) => 
+    mutationFn: (data: { email: string; password: string }) =>
       apiRequest("POST", "/api/auth/signup", data),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      // Set user ID in Matomo to link anonymous visitor to new authenticated user
+      setUserId(data.id);
+
       toast({
         title: "Account created successfully",
         description: "Please complete your therapist profile",

@@ -21,10 +21,19 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <a href="#" className="text-muted-foreground hover:text-primary">How It Works</a>
+                <Link href="/login" className="text-muted-foreground hover:text-primary">
+                  User Sign In
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-muted-foreground hover:text-primary">FAQs</a>
+                <Link href="/blog" className="text-muted-foreground hover:text-primary">
+                  Blog
+                </Link>
+              </li>
+              <li>
+                <Link href="/insights" className="text-muted-foreground hover:text-primary">
+                  Insights
+                </Link>
               </li>
             </ul>
           </div>
@@ -39,11 +48,13 @@ export function Footer() {
               </li>
               <li>
                 <Link href="/login" className="text-muted-foreground hover:text-primary">
-                  Therapist Login
+                  Therapist Sign In
                 </Link>
               </li>
               <li>
-                <a href="#" className="text-muted-foreground hover:text-primary">Pricing</a>
+                <Link href="/therapist-dashboard" className="text-muted-foreground hover:text-primary">
+                  Dashboard
+                </Link>
               </li>
             </ul>
           </div>
@@ -52,7 +63,14 @@ export function Footer() {
             <h4 className="font-semibold mb-3">Company</h4>
             <ul className="space-y-2 text-sm">
               <li>
-                <a href="#" className="text-muted-foreground hover:text-primary">About Us</a>
+                <Link href="/about" className="text-muted-foreground hover:text-primary">
+                  About Us
+                </Link>
+              </li>
+              <li>
+                <Link href="/contact" className="text-muted-foreground hover:text-primary">
+                  Contact Us
+                </Link>
               </li>
               <li>
                 <a href="#" className="text-muted-foreground hover:text-primary">Privacy Policy</a>

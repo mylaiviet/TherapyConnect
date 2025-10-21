@@ -9,6 +9,7 @@ import { initializeConversation, processUserResponse, getConversationContext } f
 import { getSavedMatches } from "./services/therapistMatcher";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
+import { trackingHelpers } from "./middleware/analyticsMiddleware";
 import { getLocationFromRequest } from "./services/ipGeolocation";
 import { trackPageView, trackLocationSearch } from "./services/analytics";
 import * as analyticsQueries from "./services/analyticsQueries";
@@ -315,6 +316,11 @@ export function registerRoutes(app: Express): void {
       req.session.userId = user.id;
       req.session.role = user.role;
 
+      // Track registration event (non-blocking)
+      trackingHelpers.trackRegistration(user.id, user.role).catch(error => {
+        console.error("Failed to track registration:", error);
+      });
+
       res.json({
         id: user.id,
         email: user.email,
@@ -352,6 +358,11 @@ export function registerRoutes(app: Express): void {
       req.session.userId = user.id;
       req.session.role = user.role;
 
+      // Track login event (non-blocking)
+      trackingHelpers.trackLogin(user.id, user.role).catch(error => {
+        console.error("Failed to track login:", error);
+      });
+
       res.json({
         id: user.id,
         email: user.email,
@@ -365,6 +376,15 @@ export function registerRoutes(app: Express): void {
 
   // Logout
   app.post("/api/auth/logout", (req: Request, res: Response) => {
+    const userId = req.session.userId;
+
+    // Track logout event before destroying session (non-blocking)
+    if (userId) {
+      trackingHelpers.trackLogout(userId).catch(error => {
+        console.error("Failed to track logout:", error);
+      });
+    }
+
     req.session.destroy((err) => {
       if (err) {
         return res.status(500).json({ error: "Failed to log out" });
@@ -467,7 +487,7 @@ export function registerRoutes(app: Express): void {
   app.put("/api/therapist/profile/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const therapist = await storage.getTherapistById(req.params.id);
-      
+
       if (!therapist) {
         return res.status(404).json({ error: "Profile not found" });
       }
@@ -477,7 +497,10 @@ export function registerRoutes(app: Express): void {
         return res.status(403).json({ error: "Forbidden" });
       }
 
-      const updated = await storage.updateTherapist(req.params.id, req.body);
+      // Sanitize the request body - remove timestamp fields that should not be updated by client
+      const { createdAt, updatedAt, lastLogin, id, userId, ...updateData } = req.body;
+
+      const updated = await storage.updateTherapist(req.params.id, updateData);
       res.json(updated);
     } catch (error) {
       console.error("Error updating profile:", error);

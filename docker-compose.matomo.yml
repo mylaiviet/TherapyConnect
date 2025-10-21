@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  matomo:
+    image: matomo:latest
+    container_name: therapyconnect-matomo
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      - MATOMO_DATABASE_HOST=matomo-db
+      - MATOMO_DATABASE_ADAPTER=mysql
+      - MATOMO_DATABASE_TABLES_PREFIX=matomo_
+      - MATOMO_DATABASE_USERNAME=matomo
+      - MATOMO_DATABASE_PASSWORD=SecurePassword123!
+      - MATOMO_DATABASE_DBNAME=matomo
+      - PHP_MEMORY_LIMIT=2048M
+      - MATOMO_GENERAL_SALT=${MATOMO_SALT:-changeme}
+    volumes:
+      - matomo-data:/var/www/html
+      - ./matomo-config:/var/www/html/config:rw
+    depends_on:
+      - matomo-db
+    networks:
+      - matomo-network
+
+  matomo-db:
+    image: mariadb:10.11
+    container_name: therapyconnect-matomo-db
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=RootPassword123!
+      - MYSQL_DATABASE=matomo
+      - MYSQL_USER=matomo
+      - MYSQL_PASSWORD=SecurePassword123!
+    volumes:
+      - matomo-db-data:/var/lib/mysql
+    command:
+      - --max-allowed-packet=64MB
+      - --innodb-buffer-pool-size=512M
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    networks:
+      - matomo-network
+
+  # Optional: Automated archiving cron job
+  matomo-archive:
+    image: matomo:latest
+    container_name: therapyconnect-matomo-archive
+    restart: always
+    volumes:
+      - matomo-data:/var/www/html:ro
+    depends_on:
+      - matomo
+      - matomo-db
+    networks:
+      - matomo-network
+    entrypoint: |
+      bash -c '
+        echo "Waiting for Matomo to be ready..."
+        sleep 60
+        echo "Starting archive cron job (every 5 minutes)..."
+        while true; do
+          echo "[$(date)] Running Matomo archiver..."
+          php /var/www/html/console core:archive --url=http://matomo 2>&1 | grep -v "Warning"
+          echo "[$(date)] Archive complete. Sleeping for 5 minutes..."
+          sleep 300
+        done
+      '
+
+volumes:
+  matomo-data:
+    name: therapyconnect-matomo-data
+  matomo-db-data:
+    name: therapyconnect-matomo-db-data
+
+networks:
+  matomo-network:
+    name: therapyconnect-matomo-network
+    driver: bridge

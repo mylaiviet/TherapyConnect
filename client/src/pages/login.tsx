@@ -16,8 +16,9 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { LogIn, Eye, EyeOff } from "lucide-react";
+import { setUserId } from "@/services/analytics";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -42,11 +43,17 @@ export default function Login() {
   const loginMutation = useMutation({
     mutationFn: (data: LoginFormData) => apiRequest("POST", "/api/auth/login", data),
     onSuccess: (data: any) => {
+      // Set user ID in Matomo to link anonymous visitor to authenticated user
+      setUserId(data.id);
+
+      // Invalidate and refetch user data to update navigation immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+
       toast({
         title: "Login successful",
         description: "Welcome back!",
       });
-      
+
       // Redirect based on user role
       if (data.role === 'admin') {
         navigate("/admin");

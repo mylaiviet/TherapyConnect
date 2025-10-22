@@ -875,6 +875,24 @@ export function registerRoutes(app: Express): void {
         req.file.originalname
       ).catch(err => console.error("Error sending upload notification:", err));
 
+      // Check if credentialing should be initialized
+      // If therapist has uploaded documents but credentialing hasn't started, update status
+      const uploadedDocs = await db
+        .select()
+        .from(credentialingDocuments)
+        .where(eq(credentialingDocuments.therapistId, therapist.id));
+
+      if (uploadedDocs.length >= 1 && (!therapist.credentialingStatus || therapist.credentialingStatus === 'not_started')) {
+        console.log(`[Document Upload] Therapist ${therapist.id} has uploaded ${uploadedDocs.length} documents. Updating status to documents_pending.`);
+        await db
+          .update(therapists)
+          .set({
+            credentialingStatus: 'documents_pending',
+            lastCredentialingUpdate: new Date(),
+          })
+          .where(eq(therapists.id, therapist.id));
+      }
+
       res.json({
         success: true,
         document,

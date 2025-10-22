@@ -25,7 +25,8 @@ import { sendAlertNotification } from './credentialingNotifications';
 export interface CredentialingProgress {
   therapistId: string;
   currentPhase: string;
-  overallStatus: 'not_started' | 'in_progress' | 'approved' | 'rejected';
+  credentialingStatus: 'not_started' | 'in_progress' | 'approved' | 'rejected'; // Frontend expects this
+  overallStatus: 'not_started' | 'in_progress' | 'approved' | 'rejected'; // Backwards compatibility
   completedPhases: string[];
   pendingPhases: string[];
   failedPhases: string[];
@@ -34,6 +35,7 @@ export interface CredentialingProgress {
   daysInProcess?: number;
   totalPhases: number;
   completedPhasesCount: number;
+  timeline?: any[]; // Frontend expects this name
   phases: {
     phase: string;
     status: string;
@@ -405,10 +407,18 @@ export async function getCredentialingProgress(therapistId: string): Promise<Cre
       daysInProcess = Math.floor((now.getTime() - started.getTime()) / (1000 * 60 * 60 * 24));
     }
 
+    const timelineData = timeline.map(t => ({
+      phase: t.phase,
+      status: t.status,
+      startedAt: t.startedAt || undefined,
+      completedAt: t.completedAt || undefined,
+    }));
+
     return {
       therapistId,
       currentPhase,
-      overallStatus: provider.credentialingStatus as any || 'not_started',
+      credentialingStatus: provider.credentialingStatus as any || 'not_started', // Frontend expects this
+      overallStatus: provider.credentialingStatus as any || 'not_started', // Backwards compatibility
       completedPhases: completed.map(t => t.phase),
       pendingPhases: pending.map(t => t.phase),
       failedPhases: failed.map(t => t.phase),
@@ -417,12 +427,8 @@ export async function getCredentialingProgress(therapistId: string): Promise<Cre
       daysInProcess,
       totalPhases: CREDENTIALING_PHASES.length,
       completedPhasesCount: completed.length,
-      phases: timeline.map(t => ({
-        phase: t.phase,
-        status: t.status,
-        startedAt: t.startedAt || undefined,
-        completedAt: t.completedAt || undefined,
-      })),
+      timeline: timelineData, // Frontend expects this name
+      phases: timelineData, // Backwards compatibility
       verifications: verifications.map(v => ({
         id: v.id,
         verificationType: v.verificationType,

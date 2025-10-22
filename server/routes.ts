@@ -3,18 +3,42 @@ import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { insertTherapistSchema, insertUserSchema, chatMessages, chatConversations, chatEscalations } from "@shared/schema";
+import multer from "multer";
+import {
+  insertTherapistSchema,
+  insertUserSchema,
+  chatMessages,
+  chatConversations,
+  chatEscalations,
+  therapists,
+  credentialingVerifications,
+  credentialingNotes,
+  credentialingAlerts,
+  credentialingDocuments,
+} from "@shared/schema";
 import type { TherapistFilters } from "./storage";
 import { initializeConversation, processUserResponse, getConversationContext } from "./services/stateMachine";
 import { getSavedMatches } from "./services/therapistMatcher";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, or, and } from "drizzle-orm";
 import { trackingHelpers } from "./middleware/analyticsMiddleware";
 import { getLocationFromRequest } from "./services/ipGeolocation";
 import { trackPageView, trackLocationSearch } from "./services/analytics";
 import * as analyticsQueries from "./services/analyticsQueries";
 import * as therapistAnalytics from "./services/therapistAnalytics";
 import * as businessIntelligence from "./services/businessIntelligence";
+import { verifyNPI, searchNPI } from "./services/npiVerification";
+import { validateDEANumber } from "./services/deaValidation";
+import { checkOIGExclusion, updateOIGDatabase, getOIGStats } from "./services/oigSamCheck";
+import {
+  initializeCredentialing,
+  runAutomatedVerifications,
+  getCredentialingProgress,
+  completeCredentialingPhase,
+} from "./services/credentialingService";
+import { documentStorage, ALLOWED_FILE_TYPES, MAX_FILE_SIZE } from "./services/documentStorage";
+import * as credentialingNotifications from "./services/credentialingNotifications";
+import blogRoutes from "./routes/blog";
 
 declare module 'express-session' {
   interface SessionData {
@@ -565,6 +589,12 @@ export function registerRoutes(app: Express): void {
   app.post("/api/admin/therapists/:id/approve", requireAdmin, async (req: Request, res: Response) => {
     try {
       const therapist = await storage.approveTherapist(req.params.id);
+
+      // Send credentialing approved email (non-blocking)
+      credentialingNotifications.sendCredentialingApprovedNotification(
+        therapist.id
+      ).catch(err => console.error("Error sending approval notification:", err));
+
       res.json(therapist);
     } catch (error) {
       console.error("Error approving therapist:", error);
@@ -580,6 +610,737 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Error rejecting therapist:", error);
       res.status(500).json({ error: "Failed to reject therapist" });
+    }
+  });
+
+  // ============================================
+  // CREDENTIALING ROUTES
+  // ============================================
+
+  // PUBLIC CREDENTIALING ROUTES (for provider self-service)
+
+  // Verify NPI (public - providers can verify their NPI before signup)
+  app.post("/api/credentialing/verify-npi", async (req: Request, res: Response) => {
+    try {
+      const { npiNumber } = req.body;
+
+      if (!npiNumber) {
+        return res.status(400).json({ error: "NPI number is required" });
+      }
+
+      const result = await verifyNPI(npiNumber);
+      res.json(result);
+    } catch (error) {
+      console.error("Error verifying NPI:", error);
+      res.status(500).json({ error: "Failed to verify NPI" });
+    }
+  });
+
+  // Save verified NPI to therapist profile (authenticated therapist only)
+  app.post("/api/therapist/credentialing/save-npi", requireAuth, async (req: Request, res: Response) => {
+    console.log("[SAVE-NPI] Route handler called!");
+    console.log("[SAVE-NPI] Session userId:", req.session.userId);
+    console.log("[SAVE-NPI] Request body:", req.body);
+
+    try {
+      const userId = req.session.userId;
+      if (!userId) {
+        console.log("[SAVE-NPI] ERROR: No userId in session");
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      const { npiNumber, verificationData } = req.body;
+
+      if (!npiNumber) {
+        return res.status(400).json({ error: "NPI number is required" });
+      }
+
+      // First verify the NPI
+      const verificationResult = await verifyNPI(npiNumber);
+
+      if (!verificationResult.valid) {
+        return res.status(400).json({
+          error: verificationResult.error || "NPI verification failed"
+        });
+      }
+
+      // Get therapist record
+      const therapist = await db.query.therapists.findFirst({
+        where: eq(therapists.userId, userId),
+      });
+
+      if (!therapist) {
+        return res.status(404).json({ error: "Therapist profile not found" });
+      }
+
+      // Update therapist NPI
+      await db
+        .update(therapists)
+        .set({
+          npiNumber: npiNumber,
+          updatedAt: new Date(),
+        })
+        .where(eq(therapists.userId, userId));
+
+      // Save verification record
+      await db.insert(credentialingVerifications).values({
+        therapistId: therapist.id,
+        verificationType: 'npi',
+        status: 'verified',
+        verificationDate: new Date(),
+        verificationSource: 'CMS NPI Registry',
+        verificationData: JSON.stringify(verificationResult),
+        notes: `Verified: ${verificationResult.name}`,
+      });
+
+      // Initialize credentialing if not started
+      console.log('[SAVE-NPI] Checking credentialing status:', therapist.credentialingStatus);
+      if (!therapist.credentialingStatus || therapist.credentialingStatus === 'not_started') {
+        console.log('[SAVE-NPI] Initializing credentialing...');
+        await initializeCredentialing(therapist.id);
+        console.log('[SAVE-NPI] ✅ Credentialing initialized');
+      }
+
+      // Mark NPI verification phase as complete
+      console.log('[SAVE-NPI] Marking NPI phase as complete...');
+      await completeCredentialingPhase(
+        therapist.id,
+        'npi_verification',
+        `NPI ${npiNumber} verified successfully: ${verificationResult.name}`
+      );
+      console.log('[SAVE-NPI] ✅ NPI phase completed');
+
+      // Update therapist credentialing status
+      console.log('[SAVE-NPI] Updating status to in_progress...');
+      await db
+        .update(therapists)
+        .set({
+          credentialingStatus: 'in_progress',
+          lastCredentialingUpdate: new Date(),
+        })
+        .where(eq(therapists.id, therapist.id));
+      console.log('[SAVE-NPI] ✅ Status updated');
+
+      res.json({
+        success: true,
+        message: "NPI saved successfully",
+        npiNumber,
+        verificationResult
+      });
+    } catch (error) {
+      console.error("Error saving NPI:", error);
+      res.status(500).json({ error: "Failed to save NPI" });
+    }
+  });
+
+  // Search NPI by name (public)
+  app.get("/api/credentialing/search-npi", async (req: Request, res: Response) => {
+    try {
+      const { firstName, lastName, city, state } = req.query;
+
+      const results = await searchNPI({
+        firstName: firstName as string,
+        lastName: lastName as string,
+        city: city as string,
+        state: state as string,
+        limit: 10,
+      });
+
+      res.json(results);
+    } catch (error) {
+      console.error("Error searching NPI:", error);
+      res.status(500).json({ error: "Failed to search NPI" });
+    }
+  });
+
+  // Validate DEA format (public)
+  app.post("/api/credentialing/validate-dea", async (req: Request, res: Response) => {
+    try {
+      const { deaNumber, lastName } = req.body;
+
+      if (!deaNumber) {
+        return res.status(400).json({ error: "DEA number is required" });
+      }
+
+      const result = validateDEANumber(deaNumber, lastName);
+      res.json(result);
+    } catch (error) {
+      console.error("Error validating DEA:", error);
+      res.status(500).json({ error: "Failed to validate DEA" });
+    }
+  });
+
+  // PROVIDER CREDENTIALING ROUTES (authenticated providers only)
+
+  // Get own credentialing status
+  app.get("/api/therapist/credentialing/status", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const therapist = await storage.getTherapistByUserId(req.session.userId!);
+
+      if (!therapist) {
+        return res.status(404).json({ error: "Therapist profile not found" });
+      }
+
+      const progress = await getCredentialingProgress(therapist.id);
+      res.json(progress);
+    } catch (error) {
+      console.error("Error fetching credentialing status:", error);
+      res.status(500).json({ error: "Failed to fetch credentialing status" });
+    }
+  });
+
+  // Initialize credentialing for own profile
+  app.post("/api/therapist/credentialing/initialize", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const therapist = await storage.getTherapistByUserId(req.session.userId!);
+
+      if (!therapist) {
+        return res.status(404).json({ error: "Therapist profile not found" });
+      }
+
+      // Check if already initialized
+      if (therapist.credentialingStatus && therapist.credentialingStatus !== 'not_started') {
+        return res.status(400).json({ error: "Credentialing already initialized" });
+      }
+
+      await initializeCredentialing(therapist.id);
+      const progress = await getCredentialingProgress(therapist.id);
+
+      res.json(progress);
+    } catch (error) {
+      console.error("Error initializing credentialing:", error);
+      res.status(500).json({ error: "Failed to initialize credentialing" });
+    }
+  });
+
+  // Configure multer for file uploads (memory storage for processing before saving)
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: MAX_FILE_SIZE,
+    },
+    fileFilter: (_req, file, cb) => {
+      if (ALLOWED_FILE_TYPES[file.mimetype as keyof typeof ALLOWED_FILE_TYPES]) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Allowed: PDF, JPG, PNG, GIF, DOC, DOCX'));
+      }
+    },
+  });
+
+  // Upload credentialing document
+  app.post("/api/therapist/credentialing/upload", requireAuth, upload.single('document'), async (req: Request, res: Response) => {
+    try {
+      const therapist = await storage.getTherapistByUserId(req.session.userId!);
+
+      if (!therapist) {
+        return res.status(404).json({ error: "Therapist profile not found" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const { documentType, expirationDate, notes } = req.body;
+
+      if (!documentType) {
+        return res.status(400).json({ error: "Document type is required" });
+      }
+
+      // Upload file to storage
+      const uploadResult = await documentStorage.uploadFile(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype,
+        therapist.id
+      );
+
+      // Save document record to database
+      const [document] = await db.insert(credentialingDocuments).values({
+        therapistId: therapist.id,
+        documentType,
+        fileName: req.file.originalname,
+        fileUrl: uploadResult.fileUrl,
+        fileSize: uploadResult.fileSize,
+        mimeType: uploadResult.mimeType,
+        uploadedBy: req.session.userId!,
+        expirationDate: expirationDate ? new Date(expirationDate) : null,
+        notes: notes || null,
+      }).returning();
+
+      // Send upload confirmation email (non-blocking)
+      credentialingNotifications.sendDocumentUploadNotification(
+        therapist.id,
+        documentType,
+        req.file.originalname
+      ).catch(err => console.error("Error sending upload notification:", err));
+
+      res.json({
+        success: true,
+        document,
+        message: "Document uploaded successfully",
+      });
+    } catch (error: any) {
+      console.error("Error uploading document:", error);
+      res.status(500).json({ error: error.message || "Failed to upload document" });
+    }
+  });
+
+  // List own credentialing documents
+  app.get("/api/therapist/credentialing/documents", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const therapist = await storage.getTherapistByUserId(req.session.userId!);
+
+      if (!therapist) {
+        return res.status(404).json({ error: "Therapist profile not found" });
+      }
+
+      const documents = await db
+        .select()
+        .from(credentialingDocuments)
+        .where(eq(credentialingDocuments.therapistId, therapist.id))
+        .orderBy(desc(credentialingDocuments.uploadedAt));
+
+      res.json(documents);
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      res.status(500).json({ error: "Failed to fetch documents" });
+    }
+  });
+
+  // Delete own credentialing document
+  app.delete("/api/therapist/credentialing/documents/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const therapist = await storage.getTherapistByUserId(req.session.userId!);
+
+      if (!therapist) {
+        return res.status(404).json({ error: "Therapist profile not found" });
+      }
+
+      const documentId = req.params.id;
+
+      // Get document to verify ownership and get file URL
+      const [document] = await db
+        .select()
+        .from(credentialingDocuments)
+        .where(
+          and(
+            eq(credentialingDocuments.id, documentId),
+            eq(credentialingDocuments.therapistId, therapist.id)
+          )
+        );
+
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      // Don't allow deletion of verified documents
+      if (document.verified) {
+        return res.status(403).json({ error: "Cannot delete verified documents" });
+      }
+
+      // Delete file from storage
+      await documentStorage.deleteFile(document.fileUrl, therapist.id);
+
+      // Delete database record
+      await db
+        .delete(credentialingDocuments)
+        .where(eq(credentialingDocuments.id, documentId));
+
+      res.json({
+        success: true,
+        message: "Document deleted successfully",
+      });
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      res.status(500).json({ error: "Failed to delete document" });
+    }
+  });
+
+  // Download/view credentialing document
+  app.get("/api/credentialing/documents/:id/download", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const documentId = req.params.id;
+
+      // Get document
+      const [document] = await db
+        .select()
+        .from(credentialingDocuments)
+        .where(eq(credentialingDocuments.id, documentId));
+
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      // Check authorization: therapist can download own documents, admin can download any
+      const isAdmin = req.session.role === 'admin' || req.session.role === 'super_admin';
+      const therapist = await storage.getTherapistByUserId(req.session.userId!);
+      const isOwner = therapist && therapist.id === document.therapistId;
+
+      if (!isAdmin && !isOwner) {
+        return res.status(403).json({ error: "Unauthorized to access this document" });
+      }
+
+      // Get file from storage
+      const fileBuffer = await documentStorage.getFile(document.fileUrl);
+
+      // Set headers for download
+      res.setHeader('Content-Type', document.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
+      res.setHeader('Content-Length', fileBuffer.length);
+
+      res.send(fileBuffer);
+    } catch (error) {
+      console.error("Error downloading document:", error);
+      res.status(500).json({ error: "Failed to download document" });
+    }
+  });
+
+  // ADMIN CREDENTIALING ROUTES
+
+  // Get all providers pending credentialing
+  app.get("/api/admin/credentialing/pending", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const pendingProviders = await db
+        .select()
+        .from(therapists)
+        .where(
+          or(
+            eq(therapists.credentialingStatus, 'documents_pending'),
+            eq(therapists.credentialingStatus, 'under_review')
+          )
+        );
+
+      res.json(pendingProviders);
+    } catch (error) {
+      console.error("Error fetching pending credentialing:", error);
+      res.status(500).json({ error: "Failed to fetch pending providers" });
+    }
+  });
+
+  // Get credentialing details for a provider
+  app.get("/api/admin/credentialing/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const therapist = await storage.getTherapistById(req.params.id);
+
+      if (!therapist) {
+        return res.status(404).json({ error: "Therapist not found" });
+      }
+
+      const progress = await getCredentialingProgress(req.params.id);
+
+      // Get all verifications
+      const verifications = await db
+        .select()
+        .from(credentialingVerifications)
+        .where(eq(credentialingVerifications.therapistId, req.params.id));
+
+      // Get all notes
+      const notes = await db
+        .select()
+        .from(credentialingNotes)
+        .where(eq(credentialingNotes.therapistId, req.params.id))
+        .orderBy(desc(credentialingNotes.createdAt));
+
+      // Get all alerts
+      const alerts = await db
+        .select()
+        .from(credentialingAlerts)
+        .where(eq(credentialingAlerts.therapistId, req.params.id))
+        .orderBy(desc(credentialingAlerts.createdAt));
+
+      res.json({
+        therapist,
+        progress,
+        verifications,
+        notes,
+        alerts,
+      });
+    } catch (error) {
+      console.error("Error fetching credentialing details:", error);
+      res.status(500).json({ error: "Failed to fetch credentialing details" });
+    }
+  });
+
+  // Run automated verifications for a provider
+  app.post("/api/admin/credentialing/:id/verify-automated", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const results = await runAutomatedVerifications(req.params.id);
+      res.json(results);
+    } catch (error) {
+      console.error("Error running automated verifications:", error);
+      res.status(500).json({ error: "Failed to run verifications" });
+    }
+  });
+
+  // Manually verify NPI for a provider
+  app.post("/api/admin/credentialing/:id/verify-npi", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const therapist = await storage.getTherapistById(req.params.id);
+
+      if (!therapist || !therapist.npiNumber) {
+        return res.status(400).json({ error: "Provider has no NPI number" });
+      }
+
+      const result = await verifyNPI(therapist.npiNumber);
+
+      // Save verification result
+      if (result.valid) {
+        await db.insert(credentialingVerifications).values({
+          therapistId: req.params.id,
+          verificationType: 'npi',
+          status: 'verified',
+          verificationDate: new Date(),
+          verifiedBy: req.session.userId!,
+          verificationSource: 'CMS NPI Registry API',
+          verificationData: JSON.stringify(result),
+          notes: `Manually verified by admin: ${result.name}`,
+        });
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error verifying NPI:", error);
+      res.status(500).json({ error: "Failed to verify NPI" });
+    }
+  });
+
+  // Complete a credentialing phase
+  app.post("/api/admin/credentialing/:id/complete-phase", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { phase, notes } = req.body;
+
+      if (!phase) {
+        return res.status(400).json({ error: "Phase is required" });
+      }
+
+      await completeCredentialingPhase(req.params.id, phase, notes);
+      const progress = await getCredentialingProgress(req.params.id);
+
+      // Send phase completed email (non-blocking)
+      const phaseOrder = [
+        'document_review', 'npi_verification', 'license_verification',
+        'education_verification', 'background_check', 'insurance_verification',
+        'oig_sam_check', 'final_review'
+      ];
+      const currentPhaseIndex = phaseOrder.indexOf(phase);
+      const nextPhase = currentPhaseIndex >= 0 && currentPhaseIndex < phaseOrder.length - 1
+        ? phaseOrder[currentPhaseIndex + 1]
+        : null;
+
+      const progressPercentage = progress.completedPhases && progress.totalPhases
+        ? Math.round((progress.completedPhases / progress.totalPhases) * 100)
+        : 0;
+
+      credentialingNotifications.sendPhaseCompletedNotification(
+        req.params.id,
+        phase,
+        nextPhase,
+        progressPercentage
+      ).catch(err => console.error("Error sending phase completed notification:", err));
+
+      res.json(progress);
+    } catch (error) {
+      console.error("Error completing phase:", error);
+      res.status(500).json({ error: "Failed to complete phase" });
+    }
+  });
+
+  // Add a credentialing note
+  app.post("/api/admin/credentialing/:id/notes", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { note, noteType, isInternal } = req.body;
+
+      if (!note) {
+        return res.status(400).json({ error: "Note content is required" });
+      }
+
+      const newNote = await db.insert(credentialingNotes).values({
+        therapistId: req.params.id,
+        authorId: req.session.userId!,
+        note,
+        noteType: noteType || 'general',
+        isInternal: isInternal !== false, // default true
+      }).returning();
+
+      res.json(newNote[0]);
+    } catch (error) {
+      console.error("Error adding note:", error);
+      res.status(500).json({ error: "Failed to add note" });
+    }
+  });
+
+  // Get documents for a specific provider (admin can view any provider's documents)
+  app.get("/api/admin/credentialing/:id/documents", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const therapistId = req.params.id;
+
+      // Verify therapist exists
+      const therapist = await storage.getTherapistById(therapistId);
+      if (!therapist) {
+        return res.status(404).json({ error: "Therapist not found" });
+      }
+
+      const documents = await db
+        .select()
+        .from(credentialingDocuments)
+        .where(eq(credentialingDocuments.therapistId, therapistId))
+        .orderBy(desc(credentialingDocuments.uploadedAt));
+
+      res.json(documents);
+    } catch (error) {
+      console.error("Error fetching provider documents:", error);
+      res.status(500).json({ error: "Failed to fetch documents" });
+    }
+  });
+
+  // Verify/approve a document (admin only)
+  app.post("/api/admin/credentialing/documents/:id/verify", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const documentId = req.params.id;
+      const { verified, notes } = req.body;
+
+      const [updatedDocument] = await db
+        .update(credentialingDocuments)
+        .set({
+          verified: verified !== false,
+          verifiedAt: verified !== false ? new Date() : null,
+          verifiedBy: verified !== false ? req.session.userId! : null,
+          notes: notes || null,
+        })
+        .where(eq(credentialingDocuments.id, documentId))
+        .returning();
+
+      if (!updatedDocument) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      // Send document verified email (non-blocking, only if verified)
+      if (verified !== false) {
+        const admin = await storage.getUserById(req.session.userId!);
+        const adminName = admin ? `${admin.email}` : "Admin Team";
+
+        credentialingNotifications.sendDocumentVerifiedNotification(
+          updatedDocument.therapistId,
+          updatedDocument.documentType,
+          updatedDocument.fileName,
+          adminName
+        ).catch(err => console.error("Error sending verification notification:", err));
+      }
+
+      res.json({
+        success: true,
+        document: updatedDocument,
+        message: verified !== false ? "Document verified" : "Document verification removed",
+      });
+    } catch (error) {
+      console.error("Error verifying document:", error);
+      res.status(500).json({ error: "Failed to verify document" });
+    }
+  });
+
+  // Get all credentialing alerts (admin overview)
+  app.get("/api/admin/credentialing/alerts", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { resolved, severity } = req.query;
+
+      let query = db.select().from(credentialingAlerts);
+
+      if (resolved !== undefined) {
+        query = query.where(eq(credentialingAlerts.resolved, resolved === 'true'));
+      }
+
+      if (severity) {
+        query = query.where(eq(credentialingAlerts.severity, severity as string));
+      }
+
+      const alerts = await query.orderBy(desc(credentialingAlerts.createdAt)).limit(100);
+
+      res.json(alerts);
+    } catch (error) {
+      console.error("Error fetching alerts:", error);
+      res.status(500).json({ error: "Failed to fetch alerts" });
+    }
+  });
+
+  // Resolve an alert
+  app.post("/api/admin/credentialing/alerts/:id/resolve", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await db
+        .update(credentialingAlerts)
+        .set({
+          resolved: true,
+          resolvedAt: new Date(),
+          resolvedBy: req.session.userId!,
+        })
+        .where(eq(credentialingAlerts.id, req.params.id));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resolving alert:", error);
+      res.status(500).json({ error: "Failed to resolve alert" });
+    }
+  });
+
+  // OIG Database Management
+
+  // Get OIG database stats
+  app.get("/api/admin/credentialing/oig/stats", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const stats = await getOIGStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching OIG stats:", error);
+      res.status(500).json({ error: "Failed to fetch OIG stats" });
+    }
+  });
+
+  // Manually trigger OIG database update
+  app.post("/api/admin/credentialing/oig/update", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      console.log("[Admin] Manually triggered OIG database update");
+      const result = await updateOIGDatabase();
+      res.json(result);
+    } catch (error) {
+      console.error("Error updating OIG database:", error);
+      res.status(500).json({ error: "Failed to update OIG database" });
+    }
+  });
+
+  // Check a specific provider against OIG
+  app.post("/api/admin/credentialing/:id/check-oig", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const therapist = await storage.getTherapistById(req.params.id);
+
+      if (!therapist) {
+        return res.status(404).json({ error: "Therapist not found" });
+      }
+
+      const result = await checkOIGExclusion(
+        therapist.firstName,
+        therapist.lastName,
+        therapist.npiNumber || undefined
+      );
+
+      // Save result
+      await db.insert(credentialingVerifications).values({
+        therapistId: req.params.id,
+        verificationType: 'oig',
+        status: result.matched ? 'failed' : 'verified',
+        verificationDate: new Date(),
+        verifiedBy: req.session.userId!,
+        verificationSource: 'OIG LEIE Database',
+        verificationData: JSON.stringify(result),
+        nextCheckDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        notes: result.matched
+          ? `EXCLUDED: ${result.exclusion?.exclusionType}`
+          : 'No match found in OIG exclusion list',
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error checking OIG:", error);
+      res.status(500).json({ error: "Failed to check OIG exclusion" });
     }
   });
 
@@ -1372,4 +2133,9 @@ export function registerRoutes(app: Express): void {
       res.status(500).json({ error: "Failed to fetch escalations" });
     }
   });
+
+  // ============================================
+  // BLOG ROUTES
+  // ============================================
+  app.use("/api/blog", blogRoutes);
 }

@@ -40,10 +40,21 @@ export const therapists = pgTable("therapists", {
   licenseType: text("license_type"),
   licenseNumber: text("license_number").notNull(),
   licenseState: text("license_state").notNull(),
+  licenseExpiration: timestamp("license_expiration"), // License expiration date
   npiNumber: text("npi_number"),
+  deaNumber: text("dea_number"), // DEA registration for prescribers
+  deaExpiration: timestamp("dea_expiration"), // DEA expiration date
+  boardCertified: boolean("board_certified").default(false),
+  boardCertification: text("board_certification"), // Certification name (e.g., "ABPN Psychiatry")
   yearsInPractice: integer("years_in_practice"),
   graduateSchool: text("graduate_school"),
   graduationYear: integer("graduation_year"),
+
+  // Credentialing Status
+  credentialingStatus: text("credentialing_status").default('not_started'), // 'not_started', 'documents_pending', 'under_review', 'approved', 'rejected'
+  credentialingStartedAt: timestamp("credentialing_started_at"),
+  credentialingCompletedAt: timestamp("credentialing_completed_at"),
+  lastCredentialingUpdate: timestamp("last_credentialing_update"),
   
   // Practice Details
   bio: text("bio"),
@@ -939,3 +950,461 @@ export type InsertSearchConversionFunnel = z.infer<typeof insertSearchConversion
 
 export type SpecialtyDemandMetrics = typeof specialtyDemandMetrics.$inferSelect;
 export type InsertSpecialtyDemandMetrics = z.infer<typeof insertSpecialtyDemandMetricsSchema>;
+
+// ============================================
+// CREDENTIALING SYSTEM
+// ============================================
+
+// Document types enum
+export const documentTypeEnum = pgEnum('document_type', [
+  'license',
+  'transcript',
+  'diploma',
+  'government_id',
+  'headshot',
+  'liability_insurance',
+  'w9',
+  'background_check_authorization',
+  'self_disclosure',
+  'resume',
+  'dea_certificate',
+  'board_certification',
+  'collaborative_agreement',
+  'other'
+]);
+
+// Verification status enum
+export const verificationStatusEnum = pgEnum('verification_status', [
+  'not_started',
+  'in_progress',
+  'verified',
+  'failed',
+  'requires_review'
+]);
+
+// Credentialing Documents table
+export const credentialingDocuments = pgTable("credentialing_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull(),
+  documentType: documentTypeEnum("document_type").notNull(),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  fileSize: integer("file_size"), // in bytes
+  mimeType: text("mime_type"),
+  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+  uploadedBy: varchar("uploaded_by"), // user ID who uploaded
+  expirationDate: timestamp("expiration_date"), // for licenses, insurance, etc.
+  verified: boolean("verified").default(false),
+  verifiedAt: timestamp("verified_at"),
+  verifiedBy: varchar("verified_by"), // admin user ID
+  notes: text("notes"), // admin notes about this document
+});
+
+// Credentialing Verifications table - tracks each verification step
+export const credentialingVerifications = pgTable("credentialing_verifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull(),
+  verificationType: text("verification_type").notNull(), // 'npi', 'license', 'education', 'background', 'dea', 'oig', 'sam'
+  status: verificationStatusEnum("status").default('not_started').notNull(),
+  verificationDate: timestamp("verification_date"),
+  verifiedBy: varchar("verified_by"), // admin user ID
+  verificationSource: text("verification_source"), // URL or source name
+  verificationData: text("verification_data"), // JSON string with verification details
+  expirationDate: timestamp("expiration_date"), // when this verification expires
+  nextCheckDate: timestamp("next_check_date"), // when to re-verify
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// OIG Exclusions table - monthly download of OIG LEIE data
+export const oigExclusions = pgTable("oig_exclusions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  lastName: text("last_name").notNull(),
+  firstName: text("first_name").notNull(),
+  middleName: text("middle_name"),
+  businessName: text("business_name"),
+  general: text("general"), // General category
+  specialty: text("specialty"),
+  npi: text("npi"),
+  dob: text("dob"), // Date of birth
+  address: text("address"),
+  city: text("city"),
+  state: text("state"),
+  zip: text("zip"),
+  exclType: text("excl_type"), // Exclusion type
+  exclDate: text("excl_date"), // Exclusion date
+  reinDate: text("rein_date"), // Reinstatement date
+  waiverDate: text("waiver_date"),
+  waiverState: text("waiver_state"),
+  importedAt: timestamp("imported_at").defaultNow().notNull(),
+});
+
+// Background Check Results table
+export const backgroundCheckResults = pgTable("background_check_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull(),
+  vendor: text("vendor").notNull(), // 'checkr', 'sterling', etc.
+  vendorCheckId: text("vendor_check_id"), // ID from vendor system
+  status: text("status").notNull(), // 'pending', 'clear', 'consider', 'suspended'
+  completedAt: timestamp("completed_at"),
+  reportUrl: text("report_url"), // URL to full report
+  criminalRecords: boolean("criminal_records").default(false),
+  sexOffenderRegistry: boolean("sex_offender_registry").default(false),
+  oigExclusion: boolean("oig_exclusion").default(false),
+  samExclusion: boolean("sam_exclusion").default(false),
+  resultData: text("result_data"), // JSON string with full results
+  reviewedBy: varchar("reviewed_by"), // admin user ID
+  reviewNotes: text("review_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Credentialing Notes table - admin notes during credentialing process
+export const credentialingNotes = pgTable("credentialing_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull(),
+  authorId: varchar("author_id").notNull(), // admin user ID
+  noteType: text("note_type"), // 'general', 'concern', 'follow_up', 'decision'
+  note: text("note").notNull(),
+  isInternal: boolean("is_internal").default(true), // if false, shared with provider
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Credentialing Timeline table - tracks progress through credentialing workflow
+export const credentialingTimeline = pgTable("credentialing_timeline", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull(),
+  phase: text("phase").notNull(), // 'document_review', 'license_verification', 'education', 'background', 'insurance', 'final_review', 'approved'
+  status: text("status").notNull(), // 'pending', 'in_progress', 'completed', 'failed'
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  assignedTo: varchar("assigned_to"), // admin user ID
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ============================================
+// BLOG SYSTEM
+// ============================================
+
+// Blog article status enum
+export const articleStatusEnum = pgEnum('article_status', ['draft', 'published', 'archived']);
+export const commentStatusEnum = pgEnum('comment_status', ['pending', 'approved', 'rejected', 'spam']);
+
+// Blog Articles table
+export const blogArticles = pgTable("blog_articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull().unique(),
+  title: text("title").notNull(),
+  excerpt: text("excerpt").notNull(),
+  content: text("content").notNull(), // markdown content
+  authorId: varchar("author_id").references(() => blogAuthors.id),
+  status: articleStatusEnum("status").default('draft').notNull(),
+  category: text("category").notNull(),
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`),
+  featuredImage: text("featured_image"),
+  readTime: integer("read_time"), // in minutes
+
+  // SEO fields
+  metaDescription: text("meta_description"),
+  metaKeywords: text("meta_keywords").array().default(sql`ARRAY[]::text[]`),
+
+  // Analytics
+  views: integer("views").default(0),
+  likes: integer("likes").default(0),
+
+  // Publishing
+  publishedAt: timestamp("published_at"),
+  scheduledFor: timestamp("scheduled_for"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Blog Authors table
+export const blogAuthors = pgTable("blog_authors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  credentials: text("credentials"), // "PhD, LCSW"
+  bio: text("bio"),
+  photoUrl: text("photo_url"),
+  email: text("email"),
+
+  // Social links
+  twitterUrl: text("twitter_url"),
+  linkedinUrl: text("linkedin_url"),
+  websiteUrl: text("website_url"),
+
+  // Stats
+  articleCount: integer("article_count").default(0),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Blog Categories table
+export const blogCategories = pgTable("blog_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  icon: text("icon"), // lucide icon name
+  articleCount: integer("article_count").default(0),
+  displayOrder: integer("display_order").default(0),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Blog Comments table
+export const blogComments = pgTable("blog_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").notNull().references(() => blogArticles.id, { onDelete: "cascade" }),
+  parentId: varchar("parent_id"), // for nested replies
+
+  // Commenter info (supports both logged in and guest)
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  guestName: text("guest_name"),
+  guestEmail: text("guest_email"),
+
+  content: text("content").notNull(),
+  status: commentStatusEnum("status").default('pending').notNull(),
+
+  // Moderation
+  moderatedBy: varchar("moderated_by").references(() => users.id, { onDelete: "set null" }),
+  moderatedAt: timestamp("moderated_at"),
+  moderationNotes: text("moderation_notes"),
+
+  // Engagement
+  likes: integer("likes").default(0),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Blog Newsletter Subscribers
+export const blogNewsletterSubscribers = pgTable("blog_newsletter_subscribers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  isActive: boolean("is_active").default(true),
+  subscribedAt: timestamp("subscribed_at").defaultNow().notNull(),
+  unsubscribedAt: timestamp("unsubscribed_at"),
+  source: text("source").default('blog_page'), // 'blog_page', 'footer', 'popup'
+});
+
+// Blog Article Likes (track who liked what)
+export const blogArticleLikes = pgTable("blog_article_likes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").notNull().references(() => blogArticles.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
+  sessionId: text("session_id"), // for anonymous users
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Automated Alerts table - for expiration warnings, exclusion matches, etc.
+export const credentialingAlerts = pgTable("credentialing_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull(),
+  alertType: text("alert_type").notNull(), // 'license_expiring', 'insurance_expiring', 'oig_match', 'document_missing'
+  severity: text("severity").notNull(), // 'info', 'warning', 'critical'
+  message: text("message").notNull(),
+  resolved: boolean("resolved").default(false),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: varchar("resolved_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Email Preferences for Credentialing Notifications
+export const credentialingEmailPreferences = pgTable("credentialing_email_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull().unique(),
+
+  // Email notification preferences
+  documentUploadConfirmation: boolean("document_upload_confirmation").default(true),
+  documentVerified: boolean("document_verified").default(true),
+  documentExpiring: boolean("document_expiring").default(true),
+  phaseCompleted: boolean("phase_completed").default(true),
+  credentialingApproved: boolean("credentialing_approved").default(true),
+  alerts: boolean("alerts").default(true),
+  criticalAlertsOnly: boolean("critical_alerts_only").default(false),
+
+  // Expiration reminder timing (days before expiration)
+  expirationReminderDays: integer("expiration_reminder_days").array().default(sql`ARRAY[90, 60, 30, 7]::integer[]`),
+
+  // Email delivery preferences
+  emailEnabled: boolean("email_enabled").default(true),
+  digestMode: boolean("digest_mode").default(false), // If true, batch non-urgent emails
+  digestFrequency: text("digest_frequency").default("daily"), // 'daily', 'weekly'
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Zod schemas for credentialing tables
+export const insertCredentialingDocumentSchema = createInsertSchema(credentialingDocuments).omit({
+  id: true,
+  uploadedAt: true,
+  verifiedAt: true,
+});
+
+export const insertCredentialingVerificationSchema = createInsertSchema(credentialingVerifications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertOigExclusionSchema = createInsertSchema(oigExclusions).omit({
+  id: true,
+  importedAt: true,
+});
+
+export const insertBackgroundCheckResultSchema = createInsertSchema(backgroundCheckResults).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCredentialingNoteSchema = createInsertSchema(credentialingNotes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCredentialingTimelineSchema = createInsertSchema(credentialingTimeline).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCredentialingAlertSchema = createInsertSchema(credentialingAlerts).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCredentialingEmailPreferencesSchema = createInsertSchema(credentialingEmailPreferences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types for credentialing tables
+export type CredentialingDocument = typeof credentialingDocuments.$inferSelect;
+export type InsertCredentialingDocument = z.infer<typeof insertCredentialingDocumentSchema>;
+
+export type CredentialingVerification = typeof credentialingVerifications.$inferSelect;
+export type InsertCredentialingVerification = z.infer<typeof insertCredentialingVerificationSchema>;
+
+export type OigExclusion = typeof oigExclusions.$inferSelect;
+export type InsertOigExclusion = z.infer<typeof insertOigExclusionSchema>;
+
+export type BackgroundCheckResult = typeof backgroundCheckResults.$inferSelect;
+export type InsertBackgroundCheckResult = z.infer<typeof insertBackgroundCheckResultSchema>;
+
+export type CredentialingNote = typeof credentialingNotes.$inferSelect;
+export type InsertCredentialingNote = z.infer<typeof insertCredentialingNoteSchema>;
+
+export type CredentialingTimeline = typeof credentialingTimeline.$inferSelect;
+export type InsertCredentialingTimeline = z.infer<typeof insertCredentialingTimelineSchema>;
+
+export type CredentialingAlert = typeof credentialingAlerts.$inferSelect;
+export type InsertCredentialingAlert = z.infer<typeof insertCredentialingAlertSchema>;
+
+// ============================================
+// BLOG SYSTEM ZOD SCHEMAS
+// ============================================
+
+export const insertBlogArticleSchema = createInsertSchema(blogArticles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  views: true,
+  likes: true,
+});
+
+export const insertBlogAuthorSchema = createInsertSchema(blogAuthors).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  articleCount: true,
+});
+
+export const insertBlogCategorySchema = createInsertSchema(blogCategories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  articleCount: true,
+});
+
+export const insertBlogCommentSchema = createInsertSchema(blogComments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  likes: true,
+});
+
+export const insertNewsletterSubscriberSchema = createInsertSchema(blogNewsletterSubscribers).omit({
+  id: true,
+  subscribedAt: true,
+});
+
+export const insertBlogArticleLikeSchema = createInsertSchema(blogArticleLikes).omit({
+  id: true,
+  createdAt: true,
+});
+
+// ============================================
+// BLOG SYSTEM TYPES
+// ============================================
+
+export type BlogArticle = typeof blogArticles.$inferSelect;
+export type InsertBlogArticle = z.infer<typeof insertBlogArticleSchema>;
+
+export type BlogAuthor = typeof blogAuthors.$inferSelect;
+export type InsertBlogAuthor = z.infer<typeof insertBlogAuthorSchema>;
+
+export type BlogCategory = typeof blogCategories.$inferSelect;
+export type InsertBlogCategory = z.infer<typeof insertBlogCategorySchema>;
+
+export type BlogComment = typeof blogComments.$inferSelect;
+export type InsertBlogComment = z.infer<typeof insertBlogCommentSchema>;
+
+export type NewsletterSubscriber = typeof blogNewsletterSubscribers.$inferSelect;
+export type InsertNewsletterSubscriber = z.infer<typeof insertNewsletterSubscriberSchema>;
+
+export type BlogArticleLike = typeof blogArticleLikes.$inferSelect;
+export type InsertBlogArticleLike = z.infer<typeof insertBlogArticleLikeSchema>;
+
+// ============================================
+// BLOG CONSTANTS
+// ============================================
+
+export const BLOG_CATEGORIES = [
+  'Mental Health Tips',
+  'Therapy Insights',
+  'Workplace Wellness',
+  'Getting Started',
+  'Mental Health Awareness',
+  'Wellness & Self-Care',
+  'Therapy Education',
+  'CBT Techniques',
+  'Coping Strategies'
+];
+
+export const BLOG_TAGS = [
+  'Anxiety',
+  'Depression',
+  'CBT',
+  'Mindfulness',
+  'Self-Care',
+  'Work-Life Balance',
+  'Relationships',
+  'Stress Management',
+  'Mental Health',
+  'Therapy',
+  'Coping Skills',
+  'PTSD',
+  'Grief',
+  'Burnout',
+  'Sleep',
+  'Resilience'
+];

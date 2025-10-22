@@ -16,6 +16,13 @@ if (process.env.NODE_ENV === "production") {
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Serve uploaded files (credentialing documents)
+// Note: In production with S3/Supabase, files are served directly from storage
+if (process.env.STORAGE_BACKEND === 'local' || !process.env.STORAGE_BACKEND) {
+  const uploadsPath = process.env.UPLOADS_PATH || './uploads';
+  app.use('/uploads', express.static(uploadsPath));
+}
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -93,6 +100,15 @@ app.use((req, res, next) => {
   // Register all API routes
   registerRoutes(app);
   console.log("✅ Routes registered");
+
+  // Initialize credentialing automated jobs (cron)
+  if (process.env.NODE_ENV === "production" || process.env.ENABLE_CRON_JOBS === "true") {
+    const { initializeCredentialingJobs } = await import("./jobs/credentialingJobs");
+    initializeCredentialingJobs();
+    console.log("✅ Credentialing cron jobs initialized");
+  } else {
+    console.log("ℹ️  Credentialing cron jobs disabled (set ENABLE_CRON_JOBS=true to enable in dev)");
+  }
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

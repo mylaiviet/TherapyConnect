@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Menu, ChevronDown, LogOut, ArrowLeft, Shield, Users, BarChart3, Settings } from "lucide-react";
+import { Menu, ChevronDown, LogOut, ArrowLeft, Shield, Users, BarChart3, Settings, FileCheck } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -102,6 +102,20 @@ export function Header() {
               </Link>
             )}
 
+            {/* Provider Credentialing - Show for logged-in non-admin users */}
+            {user && !isAdmin && (
+              <Link href="/provider-credentialing">
+                <span
+                  className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${
+                    isActive("/provider-credentialing") ? "text-primary" : "text-muted-foreground"
+                  }`}
+                  data-testid="nav-provider-credentialing"
+                >
+                  Credentialing
+                </span>
+              </Link>
+            )}
+
             {/* More Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center text-sm font-medium text-muted-foreground hover:text-primary cursor-pointer">
@@ -161,6 +175,12 @@ export function Header() {
                     <Link href="/admin#insights" className="cursor-pointer w-full">
                       <Settings className="mr-2 h-4 w-4" />
                       Business Intelligence
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin/credentialing" className="cursor-pointer w-full">
+                      <FileCheck className="mr-2 h-4 w-4" />
+                      Credentialing
                     </Link>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -255,6 +275,19 @@ export function Header() {
                   </Link>
                 )}
 
+                {/* Provider Credentialing - Show for logged-in non-admin users */}
+                {user && !isAdmin && (
+                  <Link href="/provider-credentialing">
+                    <span
+                      className="text-lg font-medium cursor-pointer block"
+                      onClick={() => setMobileMenuOpen(false)}
+                      data-testid="mobile-nav-provider-credentialing"
+                    >
+                      Credentialing
+                    </span>
+                  </Link>
+                )}
+
                 {/* Admin Section - Only visible to admins */}
                 {isAdmin && (
                   <div className="border-t pt-4 mt-4">
@@ -297,6 +330,15 @@ export function Header() {
                         >
                           <Settings className="h-4 w-4 mr-2" />
                           Business Intelligence
+                        </span>
+                      </Link>
+                      <Link href="/admin/credentialing">
+                        <span
+                          className="text-base font-medium cursor-pointer block flex items-center"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          <FileCheck className="h-4 w-4 mr-2" />
+                          Credentialing
                         </span>
                       </Link>
                     </div>

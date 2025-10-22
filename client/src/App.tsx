@@ -17,6 +17,10 @@ import ResetPassword from "@/pages/reset-password";
 import TherapistDashboard from "@/pages/therapist-dashboard";
 import ProfileEditor from "@/pages/profile-editor";
 import AdminDashboard from "@/pages/admin-dashboard";
+import AdminCredentialing from "@/pages/admin-credentialing";
+import ProviderCredentialing from "@/pages/provider-credentialing";
+import Blog from "@/pages/blog";
+import BlogArticle from "@/pages/blog-article";
 
 function Router() {
   return (
@@ -31,7 +35,11 @@ function Router() {
       <Route path="/dashboard" component={TherapistDashboard} />
       <Route path="/therapist-dashboard" component={TherapistDashboard} />
       <Route path="/dashboard/profile" component={ProfileEditor} />
+      <Route path="/provider-credentialing" component={ProviderCredentialing} />
       <Route path="/admin" component={AdminDashboard} />
+      <Route path="/admin/credentialing" component={AdminCredentialing} />
+      <Route path="/blog" component={Blog} />
+      <Route path="/blog/:slug" component={BlogArticle} />
       <Route component={NotFound} />
     </Switch>
   );

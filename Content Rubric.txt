@@ -1,0 +1,76 @@
+Here’s a concise, reusable rubric template tailored for 800–1,000 word consumer mental health articles. It fits into a CMS as required fields and checkboxes, keeps one clear message, and ensures 2–3 concrete actions plus an explicit call to action.  CBT stands for Cognitive Behavioral Therapy, and CMS stands for Content Management System.
+Article basics
+* Title (?70 chars, plain language, benefit-led):
+* Target audience (who this is for):
+* Primary outcome (one action readers do today):
+Opening essentials
+* Main message (first 2–3 sentences state the takeaway and action):
+* Why it matters (3–4 lines linking to daily-life pain points):
+Plain language and tone
+* Readability target: 6th–8th grade confirmed (yes/no):
+* Jargon check (every term defined in plain language) (yes/no):
+* Tone: respectful, stigma-reducing, empowering (yes/no):
+CBT fidelity
+* One-sentence CBT model included (feelings shift by changing thoughts/behaviors) (yes/no):
+* Present-focused, structured, goal-oriented guidance (yes/no):
+Required skills (2–3 tools)
+* Tool 1 (Behavioral Activation):
+o Step-by-step action (?4 bullets):
+o Time-bound example (e.g., “10-minute walk after lunch today”):
+o Tracking method (mood 0–10 before/after; completion checkbox):
+o Adaptations (time/energy/cultural fit alternative):
+* Tool 2 (Challenge unhelpful thoughts):
+o Thought Record micro-steps (Situation, Automatic Thought, Evidence For/Against, Balanced Thought):
+o One practiced example in plain language:
+o Tracking method (intensity re-rate 0–10):
+* Tool 3 (optional, e.g., sleep routine, problem-solving, values step):
+o Step-by-step action:
+o Tracking method:
+o Adaptations:
+Calls to action
+* Section-level CTAs at the end of each major section (yes/no):
+* Final CTA block (one observable, time-bound action + “set a reminder/add to calendar”) (paste text):
+Options and choice
+* Evidence-based options briefly listed (therapy, self-help, medication) with plain-language pros/cons and common trade-offs (yes/no):
+* Autonomy statement (reader can choose, defer, or combine) (yes/no):
+Access and formats
+* Access pathways included (telehealth, phone, digital programs, in-person) (yes/no):
+* “How to find care” paragraph (what to ask in a first visit; credential cues) (yes/no):
+Safety and crisis
+* Safety box (when to seek urgent help + how; neutral, nonshaming language) (yes/no):
+Structure and scannability
+* Headers (?5 words, action-oriented) present (yes/no):
+* Paragraph length 2–4 sentences; bulleted steps; no nested bullets (yes/no):
+* Optional micro-table/checklist used only if it improves clarity (yes/no):
+Length and scope
+* Word count within 800–1,000 (yes/no):
+* Scope check: one main message, 2–3 tools, clear CTAs (yes/no):
+Measurement and follow-up
+* Self-monitoring prompt included (mood 0–10, completion, or thought re-rate) (yes/no):
+* Next step suggestion (schedule follow-up activity or first session; what to bring) (yes/no):
+Inclusion and relevance
+* Examples reflect diverse ages, cultures, and abilities; no stereotypes (yes/no):
+* Alternatives provided for low energy/time/resources (yes/no):
+Prepublish checklist (all required)
+* Audience and purpose completed
+* Main message in first 3 sentences
+* Two CBT tools with step-by-steps
+* Section CTAs + final CTA block
+* Access paragraph (telehealth/in-person) + “find care” tips
+* Safety box included
+* Readability check passed (6th–8th grade)
+* Editor attestation: “Meets rubric; primary action is clear and timebound”
+Optional CMS automation tips
+* Lock word count range with warning banner at <750 or >1,100 words.
+* Enforce required fields (CTA, safety box, access paragraph) before publish.
+* Add a builtin readability checker and a character counter on title/lead.
+* Offer a reusable CTA library (e.g., schedule 10minute walk; 1minute Thought Record).
+1. https://teaching-resources.delta.ncsu.edu/rubric_best-practices-examples-templates/
+2. https://www.csu.edu/ctre/pdf/rubricexamples-all.pdf
+3. https://pmc.ncbi.nlm.nih.gov/articles/PMC7838905/
+4. https://www.blueprint.ai/blog/a-therapists-cheat-sheet-for-writing-a-psychosocial-assessment-with-examples
+5. https://www.wcupa.edu/coral/131appliedProblemRubric.aspx
+6. https://wellcome.org/research-funding/schemes/mental-health-award-looking-backwards-moving-forward-understanding-how
+7. https://pmc.ncbi.nlm.nih.gov/articles/PMC4310476/
+8. https://www.birmingham.ac.uk/Documents/college-mds/haps/projects/HCNA/HCNAVol2chap13sh6L.pdf
+

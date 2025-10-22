@@ -1,6 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export interface ArticleFrontmatter {
   title: string;
@@ -23,7 +29,32 @@ export interface ParsedArticle {
   slug: string;
 }
 
-const CONTENT_DIR = path.join(process.cwd(), 'content', 'blog');
+// Try multiple possible paths for content directory
+function findContentDir(): string {
+  const possiblePaths = [
+    // Development: from project root
+    path.join(process.cwd(), 'content', 'blog'),
+    // Production: from dist folder, go up to project root
+    path.join(__dirname, '..', '..', 'content', 'blog'),
+    // Alternative: from server folder
+    path.join(__dirname, '..', 'content', 'blog'),
+    // Absolute path from root
+    path.join(process.cwd(), '..', 'content', 'blog'),
+  ];
+
+  for (const dir of possiblePaths) {
+    if (fs.existsSync(dir)) {
+      console.log('[Blog] ✅ Content directory found at:', dir);
+      return dir;
+    }
+  }
+
+  // Default fallback
+  console.error('[Blog] ❌ Could not find content directory in any of these locations:', possiblePaths);
+  return possiblePaths[0];
+}
+
+const CONTENT_DIR = findContentDir();
 
 /**
  * Get all markdown files from the content/blog directory

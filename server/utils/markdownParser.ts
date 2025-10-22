@@ -30,17 +30,27 @@ const CONTENT_DIR = path.join(process.cwd(), 'content', 'blog');
  */
 export function getAllArticleSlugs(): string[] {
   try {
+    console.log('[Blog] Checking content directory:', CONTENT_DIR);
+    console.log('[Blog] process.cwd():', process.cwd());
+    console.log('[Blog] __dirname:', __dirname);
+
     if (!fs.existsSync(CONTENT_DIR)) {
-      console.warn('Content directory does not exist:', CONTENT_DIR);
+      console.error('[Blog] ❌ Content directory does not exist:', CONTENT_DIR);
+      // Try alternative paths
+      const altPath1 = path.join(__dirname, '..', '..', 'content', 'blog');
+      const altPath2 = path.join(__dirname, 'content', 'blog');
+      console.log('[Blog] Trying alternative path 1:', altPath1, 'exists:', fs.existsSync(altPath1));
+      console.log('[Blog] Trying alternative path 2:', altPath2, 'exists:', fs.existsSync(altPath2));
       return [];
     }
 
     const files = fs.readdirSync(CONTENT_DIR);
-    return files
-      .filter(file => file.endsWith('.md'))
-      .map(file => file.replace(/\.md$/, ''));
+    console.log('[Blog] ✅ Found files in content directory:', files.length);
+    const mdFiles = files.filter(file => file.endsWith('.md'));
+    console.log('[Blog] ✅ Markdown files:', mdFiles.length);
+    return mdFiles.map(file => file.replace(/\.md$/, ''));
   } catch (error) {
-    console.error('Error reading content directory:', error);
+    console.error('[Blog] ❌ Error reading content directory:', error);
     return [];
   }
 }

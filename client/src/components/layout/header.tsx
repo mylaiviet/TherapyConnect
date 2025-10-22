@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Menu, ChevronDown, LogOut, ArrowLeft, Shield, Users, BarChart3, Settings, FileCheck } from "lucide-react";
+import { Menu, ChevronDown, LogOut, Shield, Users, BarChart3, Settings, FileCheck } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -50,10 +50,6 @@ export function Header() {
     logoutMutation.mutate();
   };
 
-  const handleBack = () => {
-    window.history.back();
-  };
-
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 max-w-7xl">
@@ -70,13 +66,6 @@ export function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center space-x-6" data-sidebar>
-            {location !== "/" && (
-              <Button variant="ghost" size="sm" onClick={handleBack} className="mr-2">
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Back
-              </Button>
-            )}
-
             <Link href="/therapists">
               <span
                 className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${
@@ -88,62 +77,16 @@ export function Header() {
               </span>
             </Link>
 
-            {/* Therapist Dashboard - Show for logged-in users */}
-            {user && (
-              <Link href="/therapist-dashboard">
-                <span
-                  className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${
-                    isActive("/therapist-dashboard") ? "text-primary" : "text-muted-foreground"
-                  }`}
-                  data-testid="nav-therapist-dashboard"
-                >
-                  {isAdmin ? "My Profile" : "Dashboard"}
-                </span>
-              </Link>
-            )}
-
-            {/* Provider Credentialing - Show for logged-in non-admin users */}
-            {user && !isAdmin && (
-              <Link href="/provider-credentialing">
-                <span
-                  className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${
-                    isActive("/provider-credentialing") ? "text-primary" : "text-muted-foreground"
-                  }`}
-                  data-testid="nav-provider-credentialing"
-                >
-                  Credentialing
-                </span>
-              </Link>
-            )}
-
-            {/* More Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center text-sm font-medium text-muted-foreground hover:text-primary cursor-pointer">
-                More <ChevronDown className="ml-1 h-3 w-3" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem asChild>
-                  <Link href="/blog" className="cursor-pointer w-full">
-                    Blog
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/insights" className="cursor-pointer w-full">
-                    Insights
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/about" className="cursor-pointer w-full">
-                    About Us
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/contact" className="cursor-pointer w-full">
-                    Contact Us
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Link href="/blog">
+              <span
+                className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${
+                  isActive("/blog") || location.startsWith("/blog/") ? "text-primary" : "text-muted-foreground"
+                }`}
+                data-testid="nav-blog"
+              >
+                Blog
+              </span>
+            </Link>
 
             {/* Admin Dropdown - Only visible to admins */}
             {isAdmin && (
@@ -187,6 +130,32 @@ export function Header() {
               </DropdownMenu>
             )}
 
+            {/* Show Dashboard and Credentialing links for logged-in users */}
+            {user && !isAdmin && (
+              <>
+                <Link href="/therapist-dashboard">
+                  <span
+                    className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${
+                      isActive("/therapist-dashboard") ? "text-primary" : "text-muted-foreground"
+                    }`}
+                    data-testid="nav-therapist-dashboard"
+                  >
+                    Dashboard
+                  </span>
+                </Link>
+                <Link href="/provider-credentialing">
+                  <span
+                    className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${
+                      isActive("/provider-credentialing") ? "text-primary" : "text-muted-foreground"
+                    }`}
+                    data-testid="nav-provider-credentialing"
+                  >
+                    Credentialing
+                  </span>
+                </Link>
+              </>
+            )}
+
             {!user ? (
               <>
                 <Link href="/login">
@@ -197,16 +166,6 @@ export function Header() {
                     data-testid="nav-user-sign-in"
                   >
                     User Sign In
-                  </span>
-                </Link>
-                <Link href="/login">
-                  <span
-                    className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${
-                      isActive("/login") ? "text-primary" : "text-muted-foreground"
-                    }`}
-                    data-testid="nav-therapist-sign-in"
-                  >
-                    Therapist Sign In
                   </span>
                 </Link>
                 <Button asChild size="sm" data-testid="nav-join-button">
@@ -239,20 +198,6 @@ export function Header() {
                 <SheetTitle>Menu</SheetTitle>
               </SheetHeader>
               <nav className="flex flex-col space-y-4 mt-6">
-                {location !== "/" && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      handleBack();
-                      setMobileMenuOpen(false);
-                    }}
-                    className="justify-start"
-                  >
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Back
-                  </Button>
-                )}
-
                 <Link href="/therapists">
                   <span
                     className="text-lg font-medium cursor-pointer block"
@@ -263,30 +208,15 @@ export function Header() {
                   </span>
                 </Link>
 
-                {user && (
-                  <Link href="/therapist-dashboard">
-                    <span
-                      className="text-lg font-medium cursor-pointer block"
-                      onClick={() => setMobileMenuOpen(false)}
-                      data-testid="mobile-nav-therapist-dashboard"
-                    >
-                      {isAdmin ? "My Profile" : "Dashboard"}
-                    </span>
-                  </Link>
-                )}
-
-                {/* Provider Credentialing - Show for logged-in non-admin users */}
-                {user && !isAdmin && (
-                  <Link href="/provider-credentialing">
-                    <span
-                      className="text-lg font-medium cursor-pointer block"
-                      onClick={() => setMobileMenuOpen(false)}
-                      data-testid="mobile-nav-provider-credentialing"
-                    >
-                      Credentialing
-                    </span>
-                  </Link>
-                )}
+                <Link href="/blog">
+                  <span
+                    className="text-lg font-medium cursor-pointer block"
+                    onClick={() => setMobileMenuOpen(false)}
+                    data-testid="mobile-nav-blog"
+                  >
+                    Blog
+                  </span>
+                </Link>
 
                 {/* Admin Section - Only visible to admins */}
                 {isAdmin && (
@@ -345,43 +275,29 @@ export function Header() {
                   </div>
                 )}
 
-                <div className="border-t pt-4 mt-4">
-                  <p className="text-xs font-semibold text-muted-foreground mb-3">COMPANY</p>
-                  <div className="space-y-3">
-                    <Link href="/blog">
+                {/* Show Dashboard and Credentialing for logged-in non-admin users */}
+                {user && !isAdmin && (
+                  <div className="border-t pt-4 mt-4">
+                    <Link href="/therapist-dashboard">
                       <span
-                        className="text-base font-medium cursor-pointer block"
+                        className="text-lg font-medium cursor-pointer block mb-3"
                         onClick={() => setMobileMenuOpen(false)}
+                        data-testid="mobile-nav-therapist-dashboard"
                       >
-                        Blog
+                        Dashboard
                       </span>
                     </Link>
-                    <Link href="/insights">
+                    <Link href="/provider-credentialing">
                       <span
-                        className="text-base font-medium cursor-pointer block"
+                        className="text-lg font-medium cursor-pointer block"
                         onClick={() => setMobileMenuOpen(false)}
+                        data-testid="mobile-nav-provider-credentialing"
                       >
-                        Insights
-                      </span>
-                    </Link>
-                    <Link href="/about">
-                      <span
-                        className="text-base font-medium cursor-pointer block"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        About Us
-                      </span>
-                    </Link>
-                    <Link href="/contact">
-                      <span
-                        className="text-base font-medium cursor-pointer block"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        Contact Us
+                        Credentialing
                       </span>
                     </Link>
                   </div>
-                </div>
+                )}
 
                 <div className="border-t pt-4 mt-4">
                   {!user ? (
@@ -393,15 +309,6 @@ export function Header() {
                           data-testid="mobile-nav-user-sign-in"
                         >
                           User Sign In
-                        </span>
-                      </Link>
-                      <Link href="/login">
-                        <span
-                          className="text-lg font-medium cursor-pointer block mb-3"
-                          onClick={() => setMobileMenuOpen(false)}
-                          data-testid="mobile-nav-therapist-sign-in"
-                        >
-                          Therapist Sign In
                         </span>
                       </Link>
                       <Button
